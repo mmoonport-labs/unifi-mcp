@@ -4,14 +4,14 @@ import { ConfigError, loadConfig } from '../src/config.js';
 const OK = { UNIFI_URL: 'https://192.168.1.1', UNIFI_API_KEY: 'k' };
 
 describe('loadConfig', () => {
-  it('reads the environment; writes are off by default', () => {
-    expect(loadConfig(OK)).toEqual({ udm: { baseUrl: 'https://192.168.1.1', apiKey: 'k', site: 'default', insecure: false, certSha256: undefined }, server: { allowWrite: false } });
+  it('reads the environment; writes are not blocked by default', () => {
+    expect(loadConfig(OK)).toEqual({ udm: { baseUrl: 'https://192.168.1.1', apiKey: 'k', site: 'default', insecure: false, certSha256: undefined }, server: { readOnly: false } });
   });
   it('reads the options', () => {
     const fp = 'ab:'.repeat(31) + 'ab';
-    const c = loadConfig({ ...OK, UNIFI_SITE: 's', UNIFI_INSECURE: '1', UNIFI_ALLOW_WRITE: '1', UNIFI_CERT_SHA256: fp });
+    const c = loadConfig({ ...OK, UNIFI_SITE: 's', UNIFI_INSECURE: '1', UNIFI_READ_ONLY: '1', UNIFI_CERT_SHA256: fp });
     expect(c.udm).toMatchObject({ site: 's', insecure: true, certSha256: fp });
-    expect(c.server.allowWrite).toBe(true);
+    expect(c.server.readOnly).toBe(true);
   });
   it('refuses what is missing or malformed, without echoing the key', () => {
     expect(() => loadConfig({ UNIFI_API_KEY: 'k' })).toThrow(ConfigError);

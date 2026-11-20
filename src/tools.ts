@@ -1,10 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { registerApiTools } from './api-tools.js';
+import { SPEC_VERSIONS } from './catalog.js';
 import { Udm, UdmError } from './udm.js';
 
 export interface ServerOptions {
-  // Write tools only work when this is true (UNIFI_ALLOW_WRITE=1). Off, they refuse and say how to turn them on.
-  allowWrite?: boolean;
+  // Refuse every change (UNIFI_READ_ONLY=1). Otherwise the write tools are available and the client's permission rules
+  // (allow / ask / deny by tool name) decide whether each call goes ahead; the dry-run and confirm guard still applies.
+  readOnly?: boolean;
   // Every applied change is written here (stderr in the real server). Never the key.
   audit?: (line: string) => void;
 }
@@ -70,11 +73,20 @@ export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {
   const rows = async <T>(path: string): Promise<T[]> => ((await udm.get<Envelope<T>>(udm.legacy(path))).data ?? []);
 
   server.registerTool('unifi_info', {
-    description: 'The gateway\'s Network application version and its sites (read-only).',
-  }, guarded(async () => text({
-    info: await udm.get('/proxy/network/integration/v1/info'),
-    sites: await udm.get('/proxy/network/integration/v1/sites'),
-  })));
+    description: 'The gateway\'s Network and Protect application versions, its sites, the versions of the API specs this server has bundled, and specDrift: the applications whose version differs from the spec (read-only). '
+      + 'A spec that differs from the gateway is refreshed with scripts/update-spec.sh (see the unifi skill).',
+  }, guarded(async () => {
+    const info = await udm.get<{ applicationVersion?: string }>('/proxy/network/integration/v1/info');
+    const sites = await udm.get('/proxy/network/integration/v1/sites');
+    // Protect may not be installed (or its API not reachable): that is null, not an error.
+    const protect = await udm.get<{ applicationVersion?: string }>('/proxy/protect/integration/v1/meta/info').catch(() => null);
+    const gateway = { network: info.applicationVersion, protect: protect?.applicationVersion };
+    // A spec you supplied yourself (UNIFI_PROTECT_SPEC_FILE) is yours to keep current.
+    const specDrift = (['network', 'protect'] as const)
+      .filter((app) => gateway[app] !== undefined && SPEC_VERSIONS[app] !== 'custom' && gateway[app] !== SPEC_VERSIONS[app])
+      .map((app) => ({ app, gateway: gateway[app], spec: SPEC_VERSIONS[app] }));
+    return text({ info, sites, protect, specs: SPEC_VERSIONS, specDrift });
+  }));
 
   server.registerTool('unifi_list_port_forwards', {
     description: 'Every port-forward rule: id, name, enabled, WAN address (destination_ip), WAN port (dst_port), the LAN target (fwd, fwd_port), protocol and source (read-only).',
@@ -98,9 +110,10 @@ export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {
 
   server.registerTool('unifi_set_port_forward', {
     description: 'CHANGES THE ROUTER. Change one port-forward rule: enable or disable it, or change its LAN target (fwd, fwd_port) or WAN port (dst_port). '
-      + 'Off unless the server runs with UNIFI_ALLOW_WRITE=1. Defaults to a dry run that shows before and after; to apply, pass dry_run=false AND confirm=true, '
+      + 'Defaults to a dry run that shows before and after; to apply, pass dry_run=false AND confirm=true, '
       + 'and only after the owner has said to. Nothing here creates or deletes a rule. The reply carries the previous values so a revert is one more call. '
       + 'Uses the gateway\'s older ("legacy") rest/portforward endpoint, as the community clients do; unverified against a real write until the owner\'s first test.',
+    annotations: { readOnlyHint: false, destructiveHint: false },
     inputSchema: {
       id: z.string().regex(RULE_ID_PATTERN, 'the rule\'s _id from unifi_list_port_forwards (24 hex characters, or a UUID since the gateway\'s 2026-11-12 update)'),
       enabled: z.boolean().optional(),
@@ -112,7 +125,7 @@ export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {
     },
   }, async (args) => {
     try {
-      if (!options.allowWrite) return failure('Writes are off. Start the server with UNIFI_ALLOW_WRITE=1 to allow them.');
+      if (options.readOnly) return failure('The server is read-only (started with UNIFI_READ_ONLY=1).');
       const changes = Object.fromEntries(CHANGES.filter((key) => args[key] !== undefined).map((key) => [key, args[key]]));
       if (Object.keys(changes).length === 0) return failure(`Nothing to change: pass at least one of ${CHANGES.join(', ')}.`);
       if (args.fwd !== undefined && !isPrivateIpv4(args.fwd)) return failure('fwd must be a private LAN IPv4 address (10.x, 172.16-31.x or 192.168.x).');
@@ -134,6 +147,8 @@ export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {
       throw error;
     }
   });
+
+  registerApiTools(server, udm, options);
 
   return server;
 }

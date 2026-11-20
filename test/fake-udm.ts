@@ -11,7 +11,7 @@ export const rules = () => [
 ];
 
 // A pretend gateway: records every request and answers like the UDM's two APIs do.
-export async function fakeUdm(overrides: Record<string, (req: IncomingMessage) => { status: number; body?: string }> = {}): Promise<{ url: string; seen: Seen[]; server: Server; close: () => Promise<void> }> {
+export async function fakeUdm(overrides: Record<string, (req: IncomingMessage) => { status: number; body?: string; contentType?: string }> = {}): Promise<{ url: string; seen: Seen[]; server: Server; close: () => Promise<void> }> {
   const seen: Seen[] = [];
   const state = rules();
   const server = createServer((req, res) => {
@@ -23,14 +23,15 @@ export async function fakeUdm(overrides: Record<string, (req: IncomingMessage) =
       seen.push({ method: req.method ?? '', url: req.url ?? '', key: Array.isArray(key) ? key[0] : key, body });
       const path = `${req.method} ${req.url}`;
       const override = overrides[path];
-      const send = (status: number, payload: string) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(payload);
+      const send = (status: number, payload: string, contentType = 'application/json') => res.writeHead(status, { 'Content-Type': contentType }).end(payload);
       if (override) {
         const answer = override(req);
-        return send(answer.status, answer.body ?? '');
+        return send(answer.status, answer.body ?? '', answer.contentType);
       }
       const legacy = '/proxy/network/api/s/default/';
       if (path === 'GET /proxy/network/integration/v1/info') return send(200, '{"applicationVersion":"10.6.109"}');
-      if (path === 'GET /proxy/network/integration/v1/sites') return send(200, '{"data":[{"name":"Default"}]}');
+      if (path === 'GET /proxy/protect/integration/v1/meta/info') return send(200, '{"applicationVersion":"7.3.74"}');
+      if (path === 'GET /proxy/network/integration/v1/sites') return send(200, '{"data":[{"id":"88f7af54-98f8-306a-a1c7-c9349722b1f6","name":"Default","internalReference":"default"}]}');
       if (path === `GET ${legacy}rest/portforward`) return send(200, JSON.stringify({ meta: { rc: 'ok' }, data: state }));
       if (path === `PUT ${legacy}rest/portforward/${RULE_ID}` || path === `PUT ${legacy}rest/portforward/${UUID_RULE_ID}`) return send(200, JSON.stringify({ meta: { rc: 'ok' }, data: [JSON.parse(body)] }));
       if (path === `GET ${legacy}stat/health`) return send(200, '{"data":[{"subsystem":"wan","status":"ok","wan_ip":"203.0.113.7","secret":"x"}]}');

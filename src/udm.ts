@@ -21,6 +21,10 @@ export class UdmError extends Error {
   }
 }
 
+export interface BinaryReply { data: Buffer; contentType: string }
+
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
 const normalise = (fingerprint: string) => fingerprint.replaceAll(':', '').toLowerCase();
 
 // The gateway's local API (Network application): the official integration API under /proxy/network/integration/v1 and the older
@@ -41,11 +45,21 @@ export class Udm {
     return this.call<T>('PUT', path, body);
   }
 
+  // A binary answer (a camera snapshot): the bytes and their content type, not parsed.
+  getBinary(path: string): Promise<BinaryReply> {
+    return this.call<BinaryReply>('GET', path, undefined, true);
+  }
+
+  // Any method: the spec-driven tools (unifi_call) choose it from the operation.
+  send<T = unknown>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
+    return this.call<T>(method, path, body);
+  }
+
   legacy(path: string): string {
     return `/proxy/network/api/s/${encodeURIComponent(this.site)}/${path}`;
   }
 
-  private call<T>(method: 'GET' | 'PUT', path: string, body?: unknown): Promise<T> {
+  private call<T>(method: HttpMethod, path: string, body?: unknown, binary = false): Promise<T> {
     const url = new URL(path, this.options.baseUrl);
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const headers: Record<string, string | number> = { 'X-API-KEY': this.options.apiKey, Accept: 'application/json' };
@@ -84,12 +98,17 @@ export class Udm {
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => chunks.push(chunk));
         res.on('end', () => {
-          const text = Buffer.concat(chunks).toString('utf8');
+          const data = Buffer.concat(chunks);
           const status = res.statusCode as number;   // always set for a client response
           if (status < 200 || status >= 300) {
             reject(new UdmError(`The gateway answered ${String(status)} to ${method} ${url.pathname}.`, status));
             return;
           }
+          if (binary) {
+            resolve({ data, contentType: res.headers['content-type'] ?? '' } as T);
+            return;
+          }
+          const text = data.toString('utf8');
           try {
             resolve((text === '' ? null : JSON.parse(text)) as T);
           } catch {
