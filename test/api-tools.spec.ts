@@ -197,6 +197,27 @@ describe('unifi_call reads', () => {
     const { call } = await connect();
     expect(JSON.parse((await call('unifi_call', { operation: 'legacy_get_health' })).text).data[0].subsystem).toBe('wan');
   });
+  it('reads the newer v2 API, which answers with a bare list, and trims it', async () => {
+    const V2 = '/proxy/network/v2/api/site/default/';
+    const { call, fake } = await connect({}, { [`GET ${V2}static-dns`]: ok([{ _id: 'a', key: 'nas.lan', value: '192.168.1.5', ttl: 0 }]) });
+    expect(JSON.parse((await call('unifi_call', { operation: 'v2_list_static_dns', fields: ['key', 'value'] })).text)).toEqual([{ key: 'nas.lan', value: '192.168.1.5' }]);
+    expect(fake.seen.map((s) => s.url)).toContain(`${V2}static-dns`);
+  });
+  it('reads the extra legacy lists and stats, and offers no writes for them', async () => {
+    const { call, fake } = await connect({}, { [`GET ${LEGACY}stat/rogueap`]: ok({ data: [{ essid: 'x', channel: 6 }] }), [`GET ${LEGACY}rest/radiusprofile`]: ok({ data: [] }) });
+    expect(JSON.parse((await call('unifi_call', { operation: 'legacy_get_rogue_aps' })).text).data[0].channel).toBe(6);
+    expect(JSON.parse((await call('unifi_call', { operation: 'legacy_list_radius_profile' })).text).data).toEqual([]);
+    expect(fake.seen.length).toBe(2);
+    for (const id of ['legacy_create_radius_profile', 'legacy_update_radius_profile', 'legacy_delete_radius_profile', 'v2_create_static_dns']) expect(findOperation(id)).toBeUndefined();
+    expect(OPERATIONS.filter((o) => o.id.startsWith('v2_')).every((o) => o.risk === 'read' && o.tags.includes('v2'))).toBe(true);
+  });
+  it('finds the new reads by what they are called', () => {
+    expect(search('rogue ap', {}, 5).operations.some((o) => o.id === 'legacy_get_rogue_aps')).toBe(true);
+    expect(search('static dns', {}, 5).operations.some((o) => o.id === 'v2_list_static_dns')).toBe(true);
+  });
+  it('warns on the events read that newer gateways have dropped', () => {
+    expect(findOperation('legacy_get_events')!.summary).toContain('removed from newer Network versions');
+  });
   it('refuses bad input', async () => {
     const { call } = await connect({}, { 'GET /proxy/network/integration/v1/sites': sites });
     expect((await call('unifi_call', { operation: 'nope' })).error).toBe(true);
