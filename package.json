@@ -1,8 +1,26 @@
 {
-  "name": "unifi-mcp",
+  "name": "@mmoonport-labs/unifi-mcp",
   "version": "0.1.0",
-  "private": true,
-  "description": "A small MCP server for a UniFi gateway's local API: read tools, and write tools that are off unless enabled and need an explicit confirmation.",
+  "description": "An MCP server for a UniFi gateway: the whole Network and Protect API through search, describe and call, with dry-run-by-default changes. Unofficial.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmoonport-labs/unifi-mcp.git"
+  },
+  "homepage": "https://github.com/mmoonport-labs/unifi-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/mmoonport-labs/unifi-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "unifi",
+    "ubiquiti",
+    "unifi-protect",
+    "network",
+    "router"
+  ],
+  "mcpName": "io.github.mmoonport-labs/unifi-mcp",
   "type": "module",
   "bin": {
     "unifi-mcp": "dist/index.js"
@@ -14,7 +32,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
@@ -25,5 +44,17 @@
     "@vitest/coverage-v8": "5.1.0",
     "typescript": "7.0.2",
     "vitest": "5.1.0"
+  },
+  "files": [
+    "dist",
+    "guide",
+    "spec",
+    "scripts/update-spec.sh",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

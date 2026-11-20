@@ -55,7 +55,7 @@ export function isPortSpec(value: string): boolean {
 
 const CHANGES = ['enabled', 'fwd', 'fwd_port', 'dst_port'] as const;
 // The id goes into the request path, so it stays strictly shaped: the 24-hex ids the gateway used until 2026-11-11, or the
-// lowercase UUIDs it returned on 2026-11-12 (FS-308).
+// lowercase UUIDs it returned on 2026-11-12.
 export const RULE_ID_PATTERN = /^(?:[0-9a-f]{24}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
 export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {

@@ -1,6 +1,18 @@
 # unifi-mcp
 
-A small [MCP](https://modelcontextprotocol.io) server for a UniFi gateway's **local** API (a UDM, UDM Pro, UCG and so on, Network 9+), written so that one person can read all of it. Nothing leaves your network. Tracked as FS-307 in the Furia Jira.
+> **Unofficial.** Not affiliated with or endorsed by Ubiquiti Inc. UniFi and UniFi Protect are trademarks of Ubiquiti Inc. This server can change your network: changes are a dry run unless you confirm them, many write operations have not been tried on real gateways, and you use it at your own risk (MIT licence, no warranty). Report security problems as described in `SECURITY.md`.
+
+A small [MCP](https://modelcontextprotocol.io) server for a UniFi gateway's **local** API (a UDM, UDM Pro, UCG and so on, Network 9+), written so that one person can read all of it. Nothing leaves your network.
+
+## Install
+
+Once published (not yet): `npx -y @mmoonport-labs/unifi-mcp`, with `UNIFI_URL`, `UNIFI_API_KEY` and `UNIFI_CERT_SHA256` in the environment. For Claude Code:
+
+```sh
+claude mcp add unifi -e UNIFI_URL=https://192.168.1.1 -e UNIFI_API_KEY=<key> -e UNIFI_CERT_SHA256=<fingerprint> -- npx -y @mmoonport-labs/unifi-mcp
+```
+
+Until then, build from source as below. Needs Node 24 or newer.
 
 ## Tools
 
@@ -57,7 +69,7 @@ claude mcp add unifi --scope user \
   -- ./scripts/run.sh
 ```
 
-`scripts/run.sh` reads the key from the macOS Keychain, so it is in neither the repo nor Claude's config:
+`scripts/run.sh` (macOS only; on other systems set `UNIFI_API_KEY` in the environment) reads the key from the macOS Keychain, so it is in neither the repo nor Claude's config:
 
 ```sh
 security add-generic-password -a "$USER" -s unifi-mcp -w     # asks for the key
