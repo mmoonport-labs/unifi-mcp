@@ -4,15 +4,19 @@
 
 A small [MCP](https://modelcontextprotocol.io) server for a UniFi gateway's **local** API (a UDM, UDM Pro, UCG and so on, Network 9+), written so that one person can read all of it. Nothing leaves your network.
 
-## Install
+## Install and sign in
 
-Once published (not yet): `npx -y @mmoonport-labs/unifi-mcp`, with `UNIFI_URL`, `UNIFI_API_KEY` and `UNIFI_CERT_SHA256` in the environment. For Claude Code:
+Once published (not yet), run the setup once, in a terminal:
 
 ```sh
-claude mcp add unifi -e UNIFI_URL=https://192.168.1.1 -e UNIFI_API_KEY=<key> -e UNIFI_CERT_SHA256=<fingerprint> -- npx -y @mmoonport-labs/unifi-mcp
+npx -y @mmoonport-labs/unifi-mcp setup
 ```
 
-Until then, build from source as below. Needs Node 24 or newer.
+It asks for the **gateway address** (an IP or URL) and an **API key** (create one in UniFi: Settings > Control Plane > Integrations; typing is hidden). It then shows the gateway's certificate fingerprint, and you approve it once: the key is only ever sent to a gateway presenting that certificate. It checks that the key works before saving anything. The address and fingerprint go to `~/.config/unifi-mcp/config.json`; the key goes to the macOS Keychain or the Linux keyring (libsecret's `secret-tool`), or, where neither exists, to a file only you can read (`~/.config/unifi-mcp/key`, mode 600). `npx -y @mmoonport-labs/unifi-mcp logout` forgets all of it.
+
+Then add the server to your MCP client with no environment variables, for Claude Code `claude mcp add unifi -- npx -y @mmoonport-labs/unifi-mcp`. Environment variables (below) still work and win over what setup saved, which suits CI and containers. A saved key and fingerprint are only used for the saved address.
+
+Until it is published, build from source (`npm ci && npm run build`) and run `node dist/index.js setup`. Needs Node 24 or newer.
 
 ## Tools
 
@@ -79,7 +83,7 @@ security add-generic-password -a "$USER" -s unifi-mcp -w     # asks for the key
 
 ## Use with other MCP clients
 
-The server speaks standard MCP over stdio, so any client that can start a local server works. It needs `UNIFI_URL`, `UNIFI_API_KEY` and, better than skipping the check, `UNIFI_CERT_SHA256` (see Configuration). Build it first (`npm ci && npm run build`) and use the absolute path to `dist/index.js`. The generic entry, which most clients' JSON config takes under `mcpServers` (Claude Desktop, Cursor, Windsurf, Gemini CLI):
+The server speaks standard MCP over stdio, so any client that can start a local server works. Run `setup` once (see Install), or give it `UNIFI_URL`, `UNIFI_API_KEY` and `UNIFI_CERT_SHA256` (see Configuration). The generic entry (with the environment shown, which you can leave out after `setup`), which most clients' JSON config takes under `mcpServers` (Claude Desktop, Cursor, Windsurf, Gemini CLI):
 
 ```json
 {
