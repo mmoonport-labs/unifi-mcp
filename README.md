@@ -54,8 +54,8 @@ The catalog is every operation of Ubiquiti's official Network and Protect integr
 
 | Variable | |
 |---|---|
-| `UNIFI_URL` | required, e.g. `https://192.168.1.1` |
-| `UNIFI_API_KEY` | required. Create it in UniFi: Settings, Control Plane, Integrations. Only ever sent as the `X-API-KEY` header |
+| `UNIFI_URL` | required unless `setup` saved one, e.g. `https://192.168.1.1` |
+| `UNIFI_API_KEY` | required unless `setup` saved one. Create it in UniFi: Settings, Control Plane, Integrations. Only ever sent as the `X-API-KEY` header |
 | `UNIFI_CERT_SHA256` | recommended: pin the gateway's own certificate (its SHA-256 fingerprint). The key is not sent to any other certificate |
 | `UNIFI_INSECURE` | `1` to accept the self-signed certificate without pinning |
 | `UNIFI_SITE` | site name, default `default` |
