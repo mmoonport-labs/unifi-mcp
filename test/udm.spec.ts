@@ -1,9 +1,27 @@
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Udm, UdmError } from '../src/udm.js';
 import { fakeUdm } from './fake-udm.js';
 
 let close: (() => Promise<void>) | undefined;
 afterEach(async () => { await close?.(); close = undefined; });
+
+describe('Udm.getBinary', () => {
+  it('returns the bytes and the content type, or an empty type when the gateway sends none', async () => {
+    const fake = await fakeUdm({ 'GET /pic': () => ({ status: 200, body: 'JPEG', contentType: 'image/jpeg; q=1' }) });
+    close = fake.close;
+    expect(await new Udm({ baseUrl: fake.url, apiKey: 'k' }).getBinary('/pic')).toEqual({ data: Buffer.from('JPEG'), contentType: 'image/jpeg; q=1' });
+    const bare = createServer((_req, res) => { res.statusCode = 200; res.end('raw'); });
+    await new Promise<void>((resolve) => bare.listen(0, '127.0.0.1', resolve));
+    try {
+      const reply = await new Udm({ baseUrl: `http://127.0.0.1:${String((bare.address() as AddressInfo).port)}`, apiKey: 'k' }).getBinary('/');
+      expect(reply).toEqual({ data: Buffer.from('raw'), contentType: '' });
+    } finally {
+      bare.close();
+    }
+  });
+});
 
 describe('Udm', () => {
   it('sends the key in X-API-KEY only, and reads JSON', async () => {

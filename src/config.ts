@@ -18,6 +18,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): { udm: UdmOptions; server: S
   if (certSha256 !== undefined && !/^([0-9a-f]{2}:?){32}$/i.test(certSha256)) throw new ConfigError('UNIFI_CERT_SHA256 must be a SHA-256 fingerprint (64 hex digits, colons optional).');
   return {
     udm: { baseUrl, apiKey, site: env.UNIFI_SITE?.trim() || 'default', insecure: env.UNIFI_INSECURE === '1', certSha256 },
-    server: { allowWrite: env.UNIFI_ALLOW_WRITE === '1' },
+    server: { readOnly: env.UNIFI_READ_ONLY === '1' },
   };
 }
