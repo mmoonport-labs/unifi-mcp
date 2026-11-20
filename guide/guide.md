@@ -30,6 +30,9 @@ For every non-read operation:
 - **Official** (`api: official`): operation ids like `getFirewallZones`; the site is filled in for you (`siteId` may be omitted); ids are UUIDs.
 - **Firewall:** gateways on the zone-based firewall (Network 9+, migrated) keep their rules as official **firewall policies** and **zones** (`getFirewallPolicies`, `getFirewallZones`, `getFirewallPolicyOrdering`; there are often over a hundred, so page with `query` `limit`/`offset` and trim with `fields`). The legacy `legacy_*_firewall_rule` list is then empty: do not conclude there are no rules.
 - **Legacy** (`legacy_*` ids): the older web-app API for what the official one lacks (port forwards, firewall groups, networks, WLANs, DHCP reservations via `legacy_*_client_config`, device and client commands). Bodies are free-form rows: `legacy_update_*` takes only the fields to change and merges them over the current row. Ids are `_id` values from the list operation (24 hex or a UUID).
+- **v2** (`v2_list_*` ids, read only): the newer web-app API, for traffic rules and routes, static DNS records, AP groups, NAT, switch ACL and QoS rules. It answers with a bare list. Writes for these are not offered; tell the user the console path instead.
+- **Read-only legacy lists and stats:** `legacy_get_rogue_aps` (neighbouring APs, often dozens: use `fields` like `["essid","channel","band","rssi"]`), `legacy_get_current_channels`, `legacy_get_dpi`, hotspot vouchers and guests, RADIUS, scheduled tasks, Wi-Fi groups. Hotspot and DPI lists were empty on the gateway they were tried on, so check one record's real keys before trimming with `fields`.
+- **No events or alarms on newer gateways:** `legacy_get_events` (`stat/event`) and `stat/alarm` answer 404 on Network 11. Say the log is not available here and point the user to the console; do not keep trying.
 
 ## Gaps and gotchas
 

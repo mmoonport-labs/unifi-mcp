@@ -55,8 +55,10 @@ export class Udm {
     return this.call<T>(method, path, body);
   }
 
+  // The older web-app API; a path starting with v2/ is on the newer one (/proxy/network/v2/api/site/<site>/...).
   legacy(path: string): string {
-    return `/proxy/network/api/s/${encodeURIComponent(this.site)}/${path}`;
+    const site = encodeURIComponent(this.site);
+    return path.startsWith('v2/') ? `/proxy/network/v2/api/site/${site}/${path.slice(3)}` : `/proxy/network/api/s/${site}/${path}`;
   }
 
   private call<T>(method: HttpMethod, path: string, body?: unknown, binary = false): Promise<T> {

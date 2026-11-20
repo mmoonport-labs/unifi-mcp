@@ -24,7 +24,7 @@ export interface Operation {
   app: App;
   api: 'official' | 'legacy';
   method: HttpMethod;
-  // Official: the full path on the gateway. Legacy: relative to /proxy/network/api/s/<site>/.
+  // Official: the full path on the gateway. Legacy: relative to /proxy/network/api/s/<site>/, or, when it starts with v2/, to /proxy/network/v2/api/site/<site>/.
   path: string;
   summary: string;
   description: string;
@@ -158,10 +158,41 @@ const LEGACY_STATS: Array<[name: string, endpoint: string, summary: string]> = [
   ['devices', 'stat/device', 'adopted devices, full records'],
   ['clients', 'stat/sta', 'connected clients, full records'],
   ['all_clients', 'stat/alluser', 'every client ever seen'],
-  ['events', 'stat/event', 'recent events'],
+  ['events', 'stat/event', 'recent events (removed from newer Network versions: a 404 means this gateway no longer has it)'],
   ['sysinfo', 'stat/sysinfo', 'controller system information'],
   ['routing', 'stat/routing', 'active routes'],
   ['settings', 'get/setting', 'all site settings'],
+  ['rogue_aps', 'stat/rogueap', 'neighbouring access points seen by the radios (rogue AP scan)'],
+  ['current_channels', 'stat/current-channel', 'the channels this site may use, per band, for its country'],
+  ['dpi', 'stat/dpi', 'deep packet inspection totals'],
+  ['client_dpi', 'stat/stadpi', 'deep packet inspection per client'],
+  ['vouchers', 'stat/voucher', 'hotspot vouchers'],
+  ['guests', 'stat/guest', 'guest clients'],
+  ['guest_authorizations', 'stat/authorization', 'guest authorizations'],
+  ['country_codes', 'stat/ccode', 'country codes'],
+];
+
+// Lists that are only read here: their writes have not been tried on a real gateway.
+const LEGACY_READ_ONLY: Array<[name: string, endpoint: string, label: string]> = [
+  ['hotspot_operator', 'rest/hotspotop', 'hotspot operator'],
+  ['hotspot_package', 'rest/hotspotpackage', 'hotspot package'],
+  ['radius_profile', 'rest/radiusprofile', 'RADIUS profile'],
+  ['radius_account', 'rest/account', 'RADIUS account'],
+  ['wlan_group', 'rest/wlangroup', 'Wi-Fi group'],
+  ['scheduled_task', 'rest/scheduletask', 'scheduled task'],
+  ['dpi_app', 'rest/dpiapp', 'custom DPI application'],
+  ['dpi_group', 'rest/dpigroup', 'DPI group'],
+];
+
+// The newer "v2" API (/proxy/network/v2/api/site/<site>/...), read only: it answers with a bare list, not {meta, data}.
+const V2_READS: Array<[name: string, endpoint: string, label: string]> = [
+  ['traffic_rules', 'trafficrules', 'traffic rule'],
+  ['traffic_routes', 'trafficroutes', 'traffic route'],
+  ['static_dns', 'static-dns', 'static DNS record'],
+  ['ap_groups', 'apgroups', 'access point group'],
+  ['nat_rules', 'nat', 'NAT rule'],
+  ['acl_rules', 'acl-rules', 'switch ACL rule'],
+  ['qos_rules', 'qos-rules', 'QoS rule'],
 ];
 
 function legacyOperations(): Operation[] {
@@ -171,6 +202,11 @@ function legacyOperations(): Operation[] {
     ...base, id: `legacy_get_${name}`, method: 'GET', path: endpoint, summary: `Read ${summary} (legacy API).`, description: '',
     params: [], hasBody: false, bodyRequired: false, risk: 'read', bodySchema: undefined,
   }));
+  const read = (id: string, path: string, label: string, tags: string[]): Operation => ({
+    ...base, id, method: 'GET', path, summary: `List every ${label}.`, description: '', params: [], hasBody: false, bodyRequired: false, risk: 'read', bodySchema: undefined, tags,
+  });
+  for (const [name, endpoint, label] of LEGACY_READ_ONLY) operations.push(read(`legacy_list_${name}`, endpoint, `${label} (legacy API)`, ['Legacy']));
+  for (const [name, endpoint, label] of V2_READS) operations.push(read(`v2_list_${name}`, `v2/${endpoint}`, `${label} (v2 API)`, ['Legacy', 'v2']));
   for (const [name, endpoint, label] of LEGACY_RESOURCES) {
     operations.push(
       { ...base, id: `legacy_list_${name}`, method: 'GET', path: endpoint, summary: `List every ${label} (legacy API).`, description: '', params: [], hasBody: false, bodyRequired: false, risk: 'read', bodySchema: undefined },
