@@ -110,9 +110,19 @@ describe('validateBody for a Protect operation', () => {
 });
 
 describe('UNIFI_SPEC_FILE', () => {
-  afterEach(() => { delete process.env.UNIFI_SPEC_FILE; delete process.env.UNIFI_PROTECT_SPEC_FILE; vi.resetModules(); });
+  const SPEC_DIR = process.env.UNIFI_SPEC_DIR;
+  afterEach(() => { delete process.env.UNIFI_SPEC_FILE; delete process.env.UNIFI_PROTECT_SPEC_FILE; process.env.UNIFI_SPEC_DIR = SPEC_DIR; vi.resetModules(); });
 
-  it('says a replaced Protect spec is custom, and the bundled one is versioned', async () => {
+  it('has only the legacy operations when no spec has been fetched', async () => {
+    process.env.UNIFI_SPEC_DIR = mkdtempSync(join(tmpdir(), 'spec-'));
+    vi.resetModules();
+    const catalog = await import('../src/catalog.js');
+    expect(catalog.SPEC_VERSIONS).toEqual({ network: 'none', protect: 'none' });
+    expect(catalog.OPERATIONS.length).toBeGreaterThan(0);
+    expect(catalog.OPERATIONS.every((o) => o.api === 'legacy')).toBe(true);
+  });
+
+  it('says a replaced Protect spec is custom, and the fetched one is versioned', async () => {
     expect((await import('../src/catalog.js')).SPEC_VERSIONS.protect).toMatch(/^\d+\.\d+\.\d+$/);
     const file = join(mkdtempSync(join(tmpdir(), 'spec-')), 'protect.json');
     writeFileSync(file, JSON.stringify({ components: { schemas: {} }, paths: {} }));
@@ -123,14 +133,14 @@ describe('UNIFI_SPEC_FILE', () => {
     expect(catalog.OPERATIONS.some((o) => o.app === 'protect')).toBe(false);
   });
 
-  it('replaces the bundled spec', async () => {
+  it('replaces the fetched spec', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'spec-'));
     const file = join(dir, 'spec.json');
     writeFileSync(file, JSON.stringify({ info: { version: '99.0.0' }, components: { schemas: {} }, paths: { '/v1/ping': { get: { operationId: 'ping', summary: 'Ping', tags: ['Misc'], responses: { '200': {} } } } } }));
     process.env.UNIFI_SPEC_FILE = file;
     vi.resetModules();
     const catalog = await import('../src/catalog.js');
-    expect(catalog.SPEC_VERSIONS.network).toBe('99.0.0');
+    expect(catalog.SPEC_VERSIONS.network).toBe('custom');
     expect(catalog.findOperation('ping')).toMatchObject({ method: 'GET', path: '/proxy/network/integration/v1/ping' });
     expect(catalog.findOperation('getFirewallZones')).toBeUndefined();
   });

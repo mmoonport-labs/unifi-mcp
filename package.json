@@ -33,7 +33,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
     "start": "node dist/index.js",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "pretest": "node scripts/fetch-test-specs.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
@@ -48,8 +49,6 @@
   "files": [
     "dist",
     "guide",
-    "spec",
-    "scripts/update-spec.sh",
     "README.md",
     "LICENSE"
   ],

@@ -81,8 +81,8 @@ export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {
   const rows = async <T>(path: string): Promise<T[]> => ((await udm.get<Envelope<T>>(udm.legacy(path))).data ?? []);
 
   server.registerTool('unifi_info', {
-    description: 'The gateway\'s Network and Protect application versions, its sites, the versions of the API specs this server has bundled, and specDrift: the applications whose version differs from the spec (read-only). '
-      + 'A spec that differs from the gateway is refreshed with scripts/update-spec.sh (see the unifi skill).',
+    description: 'The gateway\'s Network and Protect application versions, its sites, the versions of the API specs it loaded (none if one could not be fetched), and specDrift: the applications whose version differs from the spec (read-only). '
+      + 'The server fetches the spec for the gateway\'s version at start-up, so a restart picks up a gateway update.',
   }, guarded(async () => {
     const info = await udm.get<{ applicationVersion?: string }>('/proxy/network/integration/v1/info');
     const sites = await udm.get('/proxy/network/integration/v1/sites');
