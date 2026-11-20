@@ -62,6 +62,7 @@ The catalog is every operation of Ubiquiti's official Network and Protect integr
 | `UNIFI_SPEC_FILE`, `UNIFI_PROTECT_SPEC_FILE` | path to another copy of the Network or Protect OpenAPI spec (a newer download or one corrected by hand), used instead of the fetched one |
 | `UNIFI_SPEC_DIR` | where fetched specs are cached; default `$XDG_CACHE_HOME/unifi-mcp` or `~/.cache/unifi-mcp` |
 | `UNIFI_SPEC_AUTO_UPDATE` | `0` to never fetch a spec (a closed network, or a spec you supply yourself) |
+| `UNIFI_AUDIT_LOG` | a file to append every applied change to, one JSON object per line (`{"time", "event"}`, secrets redacted, created readable only by you). Changes always go to stderr too |
 | `UNIFI_READ_ONLY` | `1` to refuse every change (`unifi_write`, `unifi_delete`, `unifi_set_port_forward`), whatever the permissions say |
 
 Get the fingerprint: `openssl s_client -connect 192.168.1.1:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256`
