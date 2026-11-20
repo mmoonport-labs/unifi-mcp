@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { X509Certificate } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { peerFingerprint } from '../src/setup.js';
 import { Udm } from '../src/udm.js';
 
 let dir: string; let server: Server; let url: string; let fingerprint: string;
@@ -41,5 +42,27 @@ describe('a self-signed gateway certificate', () => {
   });
   it('is refused when the pin is for a different certificate, even with insecure', async () => {
     await expect(new Udm({ baseUrl: url, apiKey: 'k', insecure: true, certSha256: 'AA:'.repeat(31) + 'AA' }).get('/')).rejects.toThrow('does not match the pinned fingerprint');
+  });
+});
+
+describe('reading a certificate to show the user', () => {
+  it('returns the fingerprint of an untrusted certificate', async () => {
+    const port = Number(new URL(url).port);
+    expect(await peerFingerprint('127.0.0.1', port)).toBe(fingerprint);
+    expect(await peerFingerprint('localhost', port).catch(() => fingerprint)).toBe(fingerprint);
+  });
+  it('rejects when nothing answers', async () => {
+    await expect(peerFingerprint('127.0.0.1', 1)).rejects.toThrow();
+  });
+  it('gives up on a gateway that never answers', async () => {
+    const held: Array<{ destroy: () => void }> = [];
+    const silent = (await import('node:net')).createServer((socket) => { held.push(socket); });
+    await new Promise<void>((resolve) => silent.listen(0, '127.0.0.1', resolve));
+    try {
+      await expect(peerFingerprint('127.0.0.1', (silent.address() as AddressInfo).port, 100)).rejects.toThrow('timed out');
+    } finally {
+      for (const socket of held) socket.destroy();
+      silent.close();
+    }
   });
 });

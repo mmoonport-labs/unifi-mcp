@@ -4,10 +4,10 @@ import type { AddressInfo } from 'node:net';
 export interface Seen { method: string; url: string; key: string | undefined; body: string }
 
 export const RULE_ID = 'aaaaaaaaaaaaaaaaaaaaaaaa';
-export const UUID_RULE_ID = 'b4230af0-d6b2-49cd-accf-3d434a294f73'; // the shape the gateway used from 2026-11-12 (FS-308)
+export const UUID_RULE_ID = 'b4230af0-d6b2-49cd-accf-3d434a294f73'; // the shape the gateway used from 2026-11-12
 export const rules = () => [
-  { _id: RULE_ID, name: 'Furia Stream Port 443', enabled: true, pfwd_interface: 'wan', destination_ip: '203.0.113.7', dst_port: '443', fwd: '192.168.50.206', fwd_port: '8443', proto: 'tcp_udp', src: 'any', log: false, site_id: 'secret-extra' },
-  { _id: UUID_RULE_ID, name: 'Furia Stream Port 1936', enabled: true, pfwd_interface: 'wan', destination_ip: '203.0.113.7', dst_port: '1936', fwd: '192.168.50.206', fwd_port: '1936', proto: 'tcp_udp', log: false },
+  { _id: RULE_ID, name: 'Stream Port 443', enabled: true, pfwd_interface: 'wan', destination_ip: '203.0.113.7', dst_port: '443', fwd: '192.168.50.206', fwd_port: '8443', proto: 'tcp_udp', src: 'any', log: false, site_id: 'secret-extra' },
+  { _id: UUID_RULE_ID, name: 'Stream Port 1936', enabled: true, pfwd_interface: 'wan', destination_ip: '203.0.113.7', dst_port: '1936', fwd: '192.168.50.206', fwd_port: '1936', proto: 'tcp_udp', log: false },
 ];
 
 // A pretend gateway: records every request and answers like the UDM's two APIs do.

@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { readVersions, specDir } from './specs.js';
 import { validate, type Findings } from './validate.js';
 import type { HttpMethod } from './udm.js';
 
-// The API as data: every operation of the official Network integration API (spec/integration.json) and the official Protect integration
-// API (spec/protect.json), Ubiquiti's OpenAPI documents, plus a table of the legacy Network endpoints the official API does not cover.
+// The API as data: every operation of the official Network integration API and the official Protect integration
+// API (Ubiquiti's OpenAPI documents, fetched at start-up: see specs.ts), plus a table of the legacy Network endpoints the official API does not cover.
 // The tools search and run this catalog instead of registering one tool each.
 
 export type Risk = 'read' | 'write' | 'delete';
@@ -52,16 +54,20 @@ const BASES: Record<App, string> = { network: '/proxy/network/integration', prot
 // An action that cannot be undone ('Permanently disable camera microphone') goes through the delete tool, whatever its method.
 const riskOf = (method: HttpMethod, summary: string): Risk => (method === 'GET' ? 'read' : method === 'DELETE' || /permanent/i.test(summary) ? 'delete' : 'write');
 
-// UNIFI_SPEC_FILE / UNIFI_PROTECT_SPEC_FILE swap in another copy of a spec (a newer download, or one corrected by hand) without rebuilding.
-const bundled = (name: string) => new URL(`../spec/${name}`, import.meta.url);
-const readJson = (file: string | URL) => JSON.parse(readFileSync(file, 'utf8')) as unknown;
-const spec = readJson(process.env.UNIFI_SPEC_FILE ?? bundled('integration.json')) as Spec;
-const protectSpec = readJson(process.env.UNIFI_PROTECT_SPEC_FILE ?? bundled('protect.json')) as Spec;
+// The specs are fetched at start-up into a cache directory (see specs.ts); UNIFI_SPEC_FILE / UNIFI_PROTECT_SPEC_FILE swap in another
+// copy (a newer download, or one corrected by hand). An application with no spec has no official operations, but its legacy ones remain.
+const EMPTY: Spec = { paths: {}, components: { schemas: {} } };
+const readJson = (file: string): unknown => JSON.parse(readFileSync(file, 'utf8'));
+const cached = (name: string): unknown => { try { return readJson(join(specDir(process.env), name)); } catch { return undefined; } };
+const load = (override: string | undefined, name: string): Spec => (override === undefined ? cached(name) as Spec | undefined : readJson(override) as Spec) ?? EMPTY;
+const spec = load(process.env.UNIFI_SPEC_FILE, 'network.json');
+const protectSpec = load(process.env.UNIFI_PROTECT_SPEC_FILE, 'protect.json');
 const ROOTS: Record<App, Spec> = { network: spec, protect: protectSpec };
-// The Network spec states its version; Protect's says 0.0.0, so the version of the bundled file is recorded beside it.
+// Which version each spec is: recorded beside the cache (Protect's own text says 0.0.0).
+const recorded = readVersions(specDir(process.env));
 export const SPEC_VERSIONS: Record<App, string> = {
-  network: (spec as unknown as { info: { version: string } }).info.version,
-  protect: process.env.UNIFI_PROTECT_SPEC_FILE === undefined ? (readJson(bundled('versions.json')) as { protect: string }).protect : 'custom',
+  network: process.env.UNIFI_SPEC_FILE === undefined ? recorded.network ?? 'none' : 'custom',
+  protect: process.env.UNIFI_PROTECT_SPEC_FILE === undefined ? recorded.protect ?? 'none' : 'custom',
 };
 
 function lookup(ref: string, root: unknown): unknown {

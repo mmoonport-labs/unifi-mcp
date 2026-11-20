@@ -1,0 +1,25 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mmoonport-labs/unifi-mcp",
+  "title": "UniFi Gateway",
+  "description": "UniFi Network and Protect through search, describe and call, with dry-run-first changes. Unofficial.",
+  "repository": {
+    "url": "https://github.com/mmoonport-labs/unifi-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@mmoonport-labs/unifi-mcp",
+      "version": "0.1.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        { "name": "UNIFI_URL", "description": "Gateway address, e.g. https://192.168.1.1. Not needed after running `unifi-mcp setup` once.", "isRequired": false },
+        { "name": "UNIFI_API_KEY", "description": "UniFi API key (Settings > Control Plane > Integrations). Not needed after `unifi-mcp setup`.", "isRequired": false, "isSecret": true },
+        { "name": "UNIFI_CERT_SHA256", "description": "SHA-256 fingerprint of the gateway's certificate, to pin it. `unifi-mcp setup` sets this for you.", "isRequired": false },
+        { "name": "UNIFI_READ_ONLY", "description": "Set to 1 to refuse every change to the gateway.", "isRequired": false }
+      ]
+    }
+  ]
+}

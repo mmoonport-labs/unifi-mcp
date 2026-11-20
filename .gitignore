@@ -6,3 +6,4 @@ coverage/
 !.env.example
 *.key
 *.log
+test/.specs/

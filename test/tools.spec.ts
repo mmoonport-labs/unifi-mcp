@@ -123,7 +123,7 @@ describe('unifi_set_port_forward', () => {
     const r = JSON.parse((await call('unifi_set_port_forward', { ...change, enabled: false, dry_run: false, confirm: true })).text);
     expect(r).toMatchObject({ applied: true, revert: { id: RULE_ID, enabled: true, fwd: '192.168.50.206', dry_run: false, confirm: true } });
     const put = fake.seen.find((s) => s.method === 'PUT')!;
-    expect(JSON.parse(put.body)).toMatchObject({ _id: RULE_ID, name: 'Furia Stream Port 443', fwd: '192.168.50.223', enabled: false, dst_port: '443' });
+    expect(JSON.parse(put.body)).toMatchObject({ _id: RULE_ID, name: 'Stream Port 443', fwd: '192.168.50.223', enabled: false, dst_port: '443' });
     expect(audit).toHaveLength(1);
     expect(audit[0]).not.toContain('"k"');
   });
@@ -131,10 +131,10 @@ describe('unifi_set_port_forward', () => {
     const { call } = await connect({});
     expect((await call('unifi_set_port_forward', { ...change, dst_port: '8443', fwd_port: '443', dry_run: false, confirm: true })).error).toBe(false);
   });
-  it('accepts the UUID ids the gateway uses since 2026-11-12 (FS-308)', async () => {
+  it('accepts the UUID ids the gateway uses since 2026-11-12', async () => {
     const { call, fake } = await connect({});
     const dry = JSON.parse((await call('unifi_set_port_forward', { id: UUID_RULE_ID, fwd: '192.168.50.223' })).text);
-    expect(dry).toMatchObject({ dryRun: true, rule: 'Furia Stream Port 1936', before: { fwd: '192.168.50.206' }, after: { fwd: '192.168.50.223' } });
+    expect(dry).toMatchObject({ dryRun: true, rule: 'Stream Port 1936', before: { fwd: '192.168.50.206' }, after: { fwd: '192.168.50.223' } });
     const applied = JSON.parse((await call('unifi_set_port_forward', { id: UUID_RULE_ID, enabled: false, dry_run: false, confirm: true })).text);
     expect(applied).toMatchObject({ applied: true, revert: { id: UUID_RULE_ID, enabled: true, dry_run: false, confirm: true } });
     expect(fake.seen.filter((s) => s.method === 'PUT').map((s) => s.url)).toEqual([`/proxy/network/api/s/default/rest/portforward/${UUID_RULE_ID}`]);

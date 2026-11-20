@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { registerApiTools } from './api-tools.js';
 import { SPEC_VERSIONS } from './catalog.js';
+import { GUIDE_URI, guide, INSTRUCTIONS } from './guide.js';
 import { Udm, UdmError } from './udm.js';
 
 export interface ServerOptions {
@@ -54,12 +55,19 @@ export function isPortSpec(value: string): boolean {
 
 const CHANGES = ['enabled', 'fwd', 'fwd_port', 'dst_port'] as const;
 // The id goes into the request path, so it stays strictly shaped: the 24-hex ids the gateway used until 2026-11-11, or the
-// lowercase UUIDs it returned on 2026-11-12 (FS-308).
+// lowercase UUIDs it returned on 2026-11-12.
 export const RULE_ID_PATTERN = /^(?:[0-9a-f]{24}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
 export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {
   const audit = options.audit ?? (() => undefined);
-  const server = new McpServer({ name: 'unifi-mcp', version: '0.1.0' });
+  const server = new McpServer({ name: 'unifi-mcp', version: '0.1.0' }, { instructions: INSTRUCTIONS });
+
+  server.registerResource('unifi-guide', GUIDE_URI, {
+    title: 'UniFi gateway guide', description: 'How to use this server well: workflow, safety rules, gotchas and recipes.', mimeType: 'text/markdown',
+  }, (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: guide() }] }));
+  server.registerPrompt('unifi_guide', {
+    description: 'Load the guide to using this server (workflow, safety rules, gotchas, recipes) into the conversation.',
+  }, () => ({ messages: [{ role: 'user', content: { type: 'text', text: guide() } }] }));
 
   const guarded = (work: () => Promise<ReturnType<typeof text>>) => async () => {
     try {
@@ -73,8 +81,8 @@ export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {
   const rows = async <T>(path: string): Promise<T[]> => ((await udm.get<Envelope<T>>(udm.legacy(path))).data ?? []);
 
   server.registerTool('unifi_info', {
-    description: 'The gateway\'s Network and Protect application versions, its sites, the versions of the API specs this server has bundled, and specDrift: the applications whose version differs from the spec (read-only). '
-      + 'A spec that differs from the gateway is refreshed with scripts/update-spec.sh (see the unifi skill).',
+    description: 'The gateway\'s Network and Protect application versions, its sites, the versions of the API specs it loaded (none if one could not be fetched), and specDrift: the applications whose version differs from the spec (read-only). '
+      + 'The server fetches the spec for the gateway\'s version at start-up, so a restart picks up a gateway update.',
   }, guarded(async () => {
     const info = await udm.get<{ applicationVersion?: string }>('/proxy/network/integration/v1/info');
     const sites = await udm.get('/proxy/network/integration/v1/sites');
