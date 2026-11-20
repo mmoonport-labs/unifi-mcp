@@ -52,7 +52,7 @@ Three more tools cover the rest of the gateway API without a tool per endpoint:
 | `unifi_write` | **changes the router**: run a create or update operation; dry run by default |
 | `unifi_delete` | **deletes**: run a delete operation; dry run by default |
 
-The catalog is every operation of Ubiquiti's official Network and Protect integration APIs (about 70 each), plus a table of the legacy Network endpoints the official API does not cover. See "API specs" below for where the OpenAPI documents come from.
+The catalog is every operation of Ubiquiti's official Network and Protect integration APIs (about 70 each), plus a table of the legacy Network endpoints the official API does not cover (read and write for firewall, networks, Wi-Fi, port forwards and clients; read only for rogue APs, DPI, hotspot, RADIUS, scheduled tasks and the newer v2 API's traffic rules, static DNS, NAT, ACL and QoS rules). See "API specs" below for where the OpenAPI documents come from.
 
 ### How the write tool is guarded
 
@@ -75,6 +75,7 @@ The catalog is every operation of Ubiquiti's official Network and Protect integr
 | `UNIFI_SPEC_FILE`, `UNIFI_PROTECT_SPEC_FILE` | path to another copy of the Network or Protect OpenAPI spec (a newer download or one corrected by hand), used instead of the fetched one |
 | `UNIFI_SPEC_DIR` | where fetched specs are cached; default `$XDG_CACHE_HOME/unifi-mcp` or `~/.cache/unifi-mcp` |
 | `UNIFI_SPEC_AUTO_UPDATE` | `0` to never fetch a spec (a closed network, or a spec you supply yourself) |
+| `UNIFI_AUDIT_LOG` | a file to append every applied change to, one JSON object per line (`{"time", "event"}`, secrets redacted, created readable only by you). Changes always go to stderr too |
 | `UNIFI_READ_ONLY` | `1` to refuse every change (`unifi_write`, `unifi_delete`, `unifi_set_port_forward`), whatever the permissions say |
 
 Get the fingerprint: `openssl s_client -connect 192.168.1.1:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256`
@@ -112,7 +113,7 @@ The server speaks standard MCP over stdio, so any client that can start a local 
 
 VS Code (Copilot) uses a `servers` key in `.vscode/mcp.json`; Codex CLI uses `[mcp_servers.unifi]` in `~/.codex/config.toml` with the same `command`, `args` and `env`. Check your client's documentation for the exact file.
 
-**The guidance travels with the server.** It sends `instructions` when a client connects, serves the longer guide (workflow, gotchas, recipes) as the resource `unifi://guide` and as the prompt `unifi_guide`, and describes every tool. A client that ignores instructions can still be told to read the guide. The Claude Code skill in `skills/unifi` is only a thin layer on top (spec upkeep, permissions).
+**The guidance travels with the server.** It sends `instructions` when a client connects, serves the longer guide (workflow, gotchas, recipes) as the resource `unifi://guide` and as the prompt `unifi_guide`, and describes every tool. It also offers four one-click read-only prompts (`network_health_check`, `who_is_on_the_network`, `troubleshoot_client`, `security_review`), which clients show as slash commands or in a prompt menu. A client that ignores instructions can still be told to read the guide. The Claude Code skill in `skills/unifi` is only a thin layer on top (spec upkeep, permissions).
 
 **Safety does not depend on the client.** Allow/ask/deny rules by tool name are a Claude Code feature; other clients approve tools in their own way, and some approve everything. What always applies is the server's guard: every change is a dry run unless `dry_run=false` **and** `confirm=true`. For a client you do not trust to ask first, start the server with `UNIFI_READ_ONLY=1`.
 
