@@ -99,7 +99,7 @@ The server speaks standard MCP over stdio, so any client that can start a local 
 
 VS Code (Copilot) uses a `servers` key in `.vscode/mcp.json`; Codex CLI uses `[mcp_servers.unifi]` in `~/.codex/config.toml` with the same `command`, `args` and `env`. Check your client's documentation for the exact file.
 
-**The guidance travels with the server.** It sends `instructions` when a client connects, serves the longer guide (workflow, gotchas, recipes) as the resource `unifi://guide` and as the prompt `unifi_guide`, and describes every tool. A client that ignores instructions can still be told to read the guide. The Claude Code skill in `.claude/skills/unifi` is only a thin layer on top (spec upkeep, permissions).
+**The guidance travels with the server.** It sends `instructions` when a client connects, serves the longer guide (workflow, gotchas, recipes) as the resource `unifi://guide` and as the prompt `unifi_guide`, and describes every tool. It also offers four one-click read-only prompts (`network_health_check`, `who_is_on_the_network`, `troubleshoot_client`, `security_review`), which clients show as slash commands or in a prompt menu. A client that ignores instructions can still be told to read the guide. The Claude Code skill in `.claude/skills/unifi` is only a thin layer on top (spec upkeep, permissions).
 
 **Safety does not depend on the client.** Allow/ask/deny rules by tool name are a Claude Code feature; other clients approve tools in their own way, and some approve everything. What always applies is the server's guard: every change is a dry run unless `dry_run=false` **and** `confirm=true`. For a client you do not trust to ask first, start the server with `UNIFI_READ_ONLY=1`.
 

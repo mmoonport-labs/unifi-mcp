@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { registerApiTools } from './api-tools.js';
 import { SPEC_VERSIONS } from './catalog.js';
 import { GUIDE_URI, guide, INSTRUCTIONS } from './guide.js';
+import { registerPrompts } from './prompts.js';
 import { Udm, UdmError } from './udm.js';
 
 export interface ServerOptions {
@@ -65,6 +66,7 @@ export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {
   server.registerResource('unifi-guide', GUIDE_URI, {
     title: 'UniFi gateway guide', description: 'How to use this server well: workflow, safety rules, gotchas and recipes.', mimeType: 'text/markdown',
   }, (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: guide() }] }));
+  registerPrompts(server);
   server.registerPrompt('unifi_guide', {
     description: 'Load the guide to using this server (workflow, safety rules, gotchas, recipes) into the conversation.',
   }, () => ({ messages: [{ role: 'user', content: { type: 'text', text: guide() } }] }));

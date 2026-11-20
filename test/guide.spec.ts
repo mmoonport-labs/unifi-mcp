@@ -35,6 +35,18 @@ describe('guidance for any client', () => {
     expect((prompt.messages[0]!.content as { text: string }).text).toBe(guide());
   });
 
+  it('offers the task prompts, which only read and point at the guide', async () => {
+    const client = await connect();
+    const names = (await client.listPrompts()).prompts.map((p) => p.name).sort();
+    expect(names).toEqual(['network_health_check', 'security_review', 'troubleshoot_client', 'unifi_guide', 'who_is_on_the_network']);
+    const text = async (name: string, args?: Record<string, string>) => ((await client.getPrompt({ name, arguments: args })).messages[0]!.content as { text: string }).text;
+    for (const name of ['network_health_check', 'security_review']) expect(await text(name)).toMatch(/do not change anything.*unifi:\/\/guide/);
+    expect(await text('who_is_on_the_network')).toContain('Who is on my network');
+    expect(await text('who_is_on_the_network', { filter: '' })).toContain('Who is on my network');
+    expect(await text('who_is_on_the_network', { filter: 'kitchen tv' })).toContain('"kitchen tv"');
+    expect(await text('troubleshoot_client', { client: 'AA:BB:CC:DD:EE:FF' })).toContain('"AA:BB:CC:DD:EE:FF"');
+  });
+
   it('keeps the guide free of client-specific text and of local details', () => {
     const text = guide();
     expect(text).toContain('search, describe, call');
