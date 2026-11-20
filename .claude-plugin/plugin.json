@@ -1,6 +1,6 @@
 {
   "name": "unifi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Manage a UniFi gateway (Network and Protect) from Claude Code: the unifi MCP server and a skill that knows how to use it. Unofficial.",
   "author": { "name": "mmoonport-labs" },
   "homepage": "https://github.com/mmoonport-labs/unifi-mcp#readme",

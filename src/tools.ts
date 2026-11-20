@@ -61,7 +61,7 @@ export const RULE_ID_PATTERN = /^(?:[0-9a-f]{24}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f
 
 export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {
   const audit = options.audit ?? (() => undefined);
-  const server = new McpServer({ name: 'unifi-mcp', version: '0.1.0' }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: 'unifi-mcp', version: '0.2.0' }, { instructions: INSTRUCTIONS });
 
   server.registerResource('unifi-guide', GUIDE_URI, {
     title: 'UniFi gateway guide', description: 'How to use this server well: workflow, safety rules, gotchas and recipes.', mimeType: 'text/markdown',

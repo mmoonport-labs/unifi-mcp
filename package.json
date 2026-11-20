@@ -1,6 +1,6 @@
 {
   "name": "@mmoonport-labs/unifi-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "An MCP server for a UniFi gateway: the whole Network and Protect API through search, describe and call, with dry-run-by-default changes. Unofficial.",
   "license": "MIT",
   "repository": {
