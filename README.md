@@ -149,7 +149,7 @@ Allowing `unifi_write` without asking leaves only the dry-run and `confirm=true`
 
 ## Development
 
-`nvm use && npm ci && npm test` (100% coverage enforced; a fake gateway and a throwaway self-signed certificate, no real router). One ticket, one branch, one PR; Conventional Commits.
+`nvm use && npm ci && npm test` (100% coverage enforced; a fake gateway and a throwaway self-signed certificate, no real router). One ticket, one branch, one PR; Conventional Commits. CI runs the same checks on every pull request. How a release is made: `RELEASING.md`.
 
 ## Status
 
