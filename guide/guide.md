@@ -1,0 +1,85 @@
+# UniFi gateway guide
+
+This server exposes the whole gateway API (Network and Protect) through a few tools. Do not guess endpoints or ids: look them up. Not every gotcha below applies to every gateway: they were found on one.
+
+
+## Workflow
+
+1. **Quick facts first.** `unifi_info` (check `specDrift`: if the gateway's version differs from the bundled spec, tell the user it can be refreshed with `scripts/update-spec.sh <network|protect> <version>` and the server restarted), `unifi_health`, `unifi_list_devices`, `unifi_list_clients`, `unifi_list_port_forwards` answer common questions in one call with trimmed fields.
+2. **Anything else: search, describe, call.**
+   - `unifi_search_api` with words (`firewall policy`, `wifi`, `vlan`, `dhcp`), optionally `tag`, `risk` (read|write|delete) or `api` (official|legacy). Prefer `official` operations when both exist.
+   - `unifi_describe_operation` for the parameters and full body schema. Do this before any write; never invent body fields.
+   - `unifi_call` runs a **read**; `unifi_write` runs a create/update; `unifi_delete` runs a delete (each refuses the others' operations, and says which tool to use).
+3. **Keep replies small.** Pass `fields` to keep only the keys you need, and `query` `limit`/`filter` on big lists (an oversized reply is refused). Read the list first, then fetch one record if you need detail.
+
+## Changing the router
+
+Changes go through `unifi_write`, `unifi_delete` and `unifi_set_port_forward`. The client may ask the user to approve each call, and the server can be started read-only (`UNIFI_READ_ONLY=1`), in which case it says so: tell the user, do not work around it. Never ask the user to loosen permissions to get a change through.
+
+For every non-read operation:
+
+1. Dry run first (the default; for an official operation the server also checks `body` against the schema: an error blocks the call and says what is wrong, a `warnings` entry means a field the bundled spec does not know, which the gateway may still accept, so check the spelling; say in your message what the call is). It returns the exact request and the **current record**. Show the user the before and after in plain words.
+2. Apply only after the owner says to: `dry_run=false` **and** `confirm=true`. Approval for one change is not approval for the next.
+3. After applying, report what changed and the `before` record. To undo, call the update again with the previous values (for a delete, the `before` record is the body of a create).
+4. Changes that can cut you off from the network (the management VLAN, WAN, the gateway's own firewall rules, the Wi-Fi SSID you are on) deserve an explicit warning and a plan to undo before the dry run is applied. Prefer disabling a rule over deleting it.
+5. Port-forward targets must be private LAN addresses; for a port forward the curated `unifi_set_port_forward` is still the best tool (it validates and returns a ready `revert`). Use it for create/update of forwards rather than `legacy_update_port_forward`; deleting a forward still goes through `legacy_delete_port_forward`.
+6. Even when the user has plainly asked for a specific change ("delete the test forwards"), still do the dry run and say what the record is before applying; it is cheap and shows the current record. Quote the `before` record back afterwards.
+
+## Two APIs
+
+- **Official** (`api: official`): operation ids like `getFirewallZones`; the site is filled in for you (`siteId` may be omitted); ids are UUIDs.
+- **Firewall:** gateways on the zone-based firewall (Network 9+, migrated) keep their rules as official **firewall policies** and **zones** (`getFirewallPolicies`, `getFirewallZones`, `getFirewallPolicyOrdering`; there are often over a hundred, so page with `query` `limit`/`offset` and trim with `fields`). The legacy `legacy_*_firewall_rule` list is then empty: do not conclude there are no rules.
+- **Legacy** (`legacy_*` ids): the older web-app API for what the official one lacks (port forwards, firewall groups, networks, WLANs, DHCP reservations via `legacy_*_client_config`, device and client commands). Bodies are free-form rows: `legacy_update_*` takes only the fields to change and merges them over the current row. Ids are `_id` values from the list operation (24 hex or a UUID).
+
+## Gaps and gotchas
+
+- **`unifi_list_clients` is thin**: no AP, signal, usage or blocked flag. Use `legacy_get_clients` (connected clients, full rows) with `fields`, e.g. `["name","hostname","mac","is_wired","ap_mac","essid","signal","tx_bytes","rx_bytes","wired-tx_bytes","wired-rx_bytes","uptime"]`. Map `ap_mac` to a name with `legacy_get_devices` (`fields: ["name","mac"]`).
+- **Blocked clients are usually offline**, so they are missing from `legacy_get_clients`. Read `blocked` from `legacy_list_client_config` (every known client) or `legacy_get_all_clients`.
+- **Byte counters**: for Wi-Fi clients `tx_bytes` is what the client *downloaded*; for wired clients `wired-tx_bytes` is the download. They reset when the client reconnects, so fetch `uptime` and report a per-day rate, not just totals.
+- **`legacy_list_client_config` has no query filter** (passing `mac` errors with "Declared: none"). Fetch `fields: ["_id","mac"]` and match the MAC yourself to get the `_id` for an update.
+- **Vendor/type shown for a client** comes from the fingerprint (`dev_vendor`, `dev_cat`, `dev_id`); `oui` is a MAC-prefix lookup and is not worth overwriting. To change the device type, set `dev_id_override` on the client record (existing overrides show up as `dev_id_override` in `legacy_get_all_clients`).
+- **Settings are read-only through this server**: `legacy_get_settings` reads them (UPnP and NAT-PMP under key `usg`, IPS mode under `ips`, SSH under `mgmt`), but there is no write operation for them. Tell the user the console path instead of trying to work around it. Wi-Fi is different: `legacy_update_wlan` and the official `updateWifiBroadcast` exist. Always `unifi_search_api` the write risk for a resource before telling the user it can't be changed.
+- **Secrets are redacted by the server.** Any string under a key like `x_passphrase`, `password`, `psk`, `secret`, `token` or `shadow` shows as `[redacted]` in every `unifi_call`, `unifi_write` and `unifi_delete` reply and in the audit log; the real value is still sent to the gateway on a write (a `legacy_update_*` merges over the real current row). So you cannot read or compare passphrases through this server: do not claim a passphrase is reused or weak, ask the user to check in the UniFi app. Setting a new passphrase works (put it in `body`; it is hidden in the reply). Still read SSIDs with `legacy_list_wlan` and an explicit `fields` list, and summarise a `before` record by the keys that changed rather than pasting it. The older `unifi_list_*` tools return only chosen fields and never include secrets.
+- **Wi-Fi security keys**: WPA3 transition is `{wpa3_support: true, wpa3_transition: true}` (keep `wpa_mode: "wpa2"`); protected management frames is `pmf_mode: "optional"` (use `optional`, not `required`, so older IoT devices keep working). IoT SSIDs on 2.4 GHz usually can't do WPA3, so leave `wpa3_support` off there and set only `pmf_mode`.
+- **Before deleting a network or SSID**, check nothing depends on it: no connected client on it (`legacy_get_clients`, `network_id`), no SSID using its `networkconf_id` (`legacy_list_wlan`), no switch port profile (`legacy_list_port_profile`, `native_networkconf_id`). Deleting an SSID does not delete its VLAN; delete the network separately if it is meant to go.
+- **Firewall policy bodies use `zoneId`** in `source` and `destination` (the bundled spec, 11.0.99, matches; older specs said `firewallZoneId` and the gateway answered a bare `400`). Build write bodies from a GET of the same policy, copying its shape, and send it back with only the intended field changed. `patchFirewallPolicy` only accepts `loggingEnabled` and `reportFlowEnabled`; to enable or disable a policy you must PUT the whole body.
+- **Finding user-defined firewall policies**: system-managed policies are the bulk of the list. `getFirewallPolicies` with `filter: "metadata.origin.eq('USER_DEFINED')"` returns only the editable ones (a minority of the list); page with `limit`/`offset` (about 20 per page with source/destination fields) and trim with `fields`. Compound filters (`and(...)`) returned a 400, so filter on one property and pick the rest client-side. `getFirewallPolicyOrdering` needs `sourceFirewallZoneId` and `destinationFirewallZoneId` query parameters (here the spec name is correct) and shows the order of user-defined rules within one zone pair.
+- **Traffic matching lists decide what rules match; read them** (`getTrafficMatchingLists`, then `updateTrafficMatchingList` with the full `{type, name, items}` body). A rule that looks right can be dead because its list is wrong: here a list named `rfc1918` held `198.168.0.0/16` (typo) and `0.0.0.0/8`, so "Block VLAN to VLAN" matched nothing and every VLAN could reach every other. Check the list contents against the real subnets (`legacy_list_network`) before trusting a rule, and when fixing a list that activates a block, enable the matching allow rules first.
+- **Zone migration leaves duplicate rules.** Rules are often copied into every destination zone (External, Vpn, Hotspot). A copy is dead if its destination IP is internal but its destination zone is not Internal, or if it names a VLAN-to-VLAN match toward External. Map official network ids to names by reading rules that name them (the ids in policies are the official `external_id`, not the legacy `_id`), confirm which zone each network sits in with `getFirewallZones`, then delete copies that cannot match. After the cleanup, test reachability from a real client (`ping` across VLANs, one expected-reachable and one expected-blocked) and read `unifi_health`.
+- **Switch port VLANs cannot be changed through this server.** A port's VLAN is `native_networkconf_id` (plus `forward` and `tagged_vlan_mgmt`) in the switch's `port_overrides`, read with `legacy_get_devices` and `fields: ["name","mac","port_overrides"]`; there is no write for it (`legacy_update_port_profile` edits profiles, which are empty here). Give the console path instead: Devices > the switch > Ports > the port > Native VLAN. Camera ports use `forward: "native"` and `tagged_vlan_mgmt: "block_all"`; set both when moving a device onto the Cameras VLAN. Find a device's port with `legacy_get_clients` (`sw_mac`, `sw_port`).
+- **A device moved between VLANs may not get a lease.** After the port change the client showed on the new network with no `ip` and Protect said DISCONNECTED (the doorbell was probably retrying its old lease). A PoE power-cycle fixed it: `executePortAction` via `unifi_write` with `path_params {deviceId, portIdx}` (the deviceId is the official id from `getAdoptedDeviceOverviewPage`, not the MAC) and `body {action: "POWER_CYCLE"}`. Dry run first, and warn the user the device loses power for a few seconds. It then took a few minutes to come back. If it never gets an address, revert the port to the old VLAN rather than leave the device offline.
+- **Moving a camera or doorbell to the Cameras VLAN**: its IP changes to that VLAN's range, phones and PCs on Security can no longer reach it directly (if the firewall blocks that path), and anything pointing at the old IP breaks. Viewing through the Protect app goes via the NVR and keeps working. Verify with `legacy_get_clients` (network `Cameras`, an `ip`) and `protect_get_camera_details` (`state: "CONNECTED"`); a snapshot is optional and only if the user asks.
+- **`legacy_get_clients` takes no query** (not even `mac`); fetch with `fields` and match client-side. A client with no `ip` is on the network without a lease. Do not wait with `sleep`; ask the user to say when to re-check.
+- **Large replies**: `getFirewallPolicies` is ~140 KB for ~150 policies; always pass `fields: ["name","enabled","action"]` and add more only if needed. `legacy_get_settings` and `legacy_get_devices` also need `fields`.
+
+## Protect (cameras)
+
+`unifi_search_api` with `app: "protect"` finds them; ids start `protect_` and read like the summary (`protect_get_all_cameras`, `protect_get_camera_details`, `protect_get_camera_snapshot`, `protect_patch_camera_settings`, `protect_play_siren`). There is no site, ids are 24-hex strings, and the same API key is used. Nothing here is from the legacy API.
+
+- *Camera list:* `protect_get_all_cameras` with `fields: ["id","name","state","isRecording"]` (check the real keys with one unfiltered record first). Match a name to its `id` before any other call.
+- *Look at a camera:* `protect_get_camera_snapshot` with `path_params: {id}` returns an image you can look at. Say which camera you looked at; do not describe people more than the user asked for.
+- *Changes* (`protect_patch_*`, `protect_play_siren`, `protect_*arm_profile*`, PTZ) follow the same dry run and confirm steps. A siren or chime is audible in the house: say so before applying. `protect_permanently_disable_camera_microphone` cannot be undone, so it runs through `unifi_delete` and needs an explicit, specific request.
+- *Cannot be done here:* live event and device streams (WebSockets) and uploading device asset files. Say so rather than trying another way. For recent events there is no read operation in this API: tell the user to use the Protect app.
+- *Stream URLs* from `protect_create_rtsps_streams_for_camera` or `protect_get_rtsps_streams_for_camera` carry an access token. Give one to the user only if they asked for it, and never paste it anywhere else.
+- Protect writes are unverified on this gateway. Read the record again after applying.
+
+## Recipes
+
+- *Who is on the network / is X online?* `unifi_list_clients`, then filter by name, IP or MAC.
+- *Which clients are on AP X / which TVs are on it?* `legacy_get_clients` plus `legacy_get_devices` as above; match `ap_mac`, then pick by name, hostname or `oui`.
+- *Biggest bandwidth users:* `legacy_get_clients` with the byte and `uptime` fields; rank by download rate.
+- *Anything blocked?* `legacy_list_client_config`, keep rows with `blocked: true`.
+- *Rename a client:* find `_id` from `legacy_list_client_config`, then `legacy_update_client_config` with `{name: "..."}` (merged over the record; does not change the blocked state).
+- *Security review:* read, never change, in this order: `legacy_list_port_forward` (any-source forwards, test or duplicate rules, plain-HTTP, SSH and admin ports, logging off); `legacy_list_wlan` (`wpa_mode`, `wpa3_support`, `pmf_mode`); `legacy_list_network` (VLAN layout, which devices share one); `legacy_get_settings` (UPnP, IPS `ids` vs `ips`, SSH password auth); `legacy_get_devices` (`upgradable`); `getFirewallPolicies` with trimmed fields (many duplicates and disabled inter-VLAN blocks are common after a zone migration; you cannot judge the VLAN-to-VLAN matrix from names alone, say so). Report ranked by severity and list what was not checked (service logins, VPN setup, firmware CVEs).
+- *Is the internet healthy?* `unifi_health`; look at the `wan` and `www` subsystems.
+- *Fixed IP for a device:* find it with `legacy_list_client_config`, then `legacy_update_client_config` with `{use_fixedip: true, fixed_ip: "192.168.x.y"}` (dry run first).
+- *Block or kick a client:* `legacy_client_command` with `{cmd: "block-sta" | "unblock-sta" | "kick-sta", mac}`.
+- *Restart a device:* `legacy_device_command` with `{cmd: "restart", mac}`. Warn the user about the outage first.
+- *New VLAN / Wi-Fi / firewall policy:* `unifi_search_api` the resource, describe the create operation, build the body from the schema, dry run, confirm.
+
+## When something fails
+
+- `401/403`: the API key is wrong or lacks rights.
+- `404` on an official operation: the gateway's version differs from the bundled spec (`spec/integration.json` is Network 11.0.99, `spec/protect.json` is Protect 7.3.74; `unifi_info` shows the gateway's); try the `legacy_*` equivalent or refresh the spec with `scripts/update-spec.sh network|protect <version>`.
+- "Could not reach the gateway" / certificate mismatch: check `UNIFI_URL` and `UNIFI_CERT_SHA256`.
+- Run for real on this gateway so far: legacy port-forward update and delete (changing `proto`/`log`, removing rules), `legacy_update_client_config` (rename), `legacy_update_wlan` (WPA3 transition, `pmf_mode`), `legacy_delete_wlan`, `legacy_delete_network`, and on the official API `deleteFirewallPolicy`, `updateFirewallPolicy` (enable a disabled rule), `patchFirewallPolicy` (logging) `updateTrafficMatchingList` and `executePortAction` (`POWER_CYCLE`). Every other write is untested, so verify the result by reading the record again after applying. The gateway may reorder a record in its list after an update.

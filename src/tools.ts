@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { registerApiTools } from './api-tools.js';
 import { SPEC_VERSIONS } from './catalog.js';
+import { GUIDE_URI, guide, INSTRUCTIONS } from './guide.js';
 import { Udm, UdmError } from './udm.js';
 
 export interface ServerOptions {
@@ -59,7 +60,14 @@ export const RULE_ID_PATTERN = /^(?:[0-9a-f]{24}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f
 
 export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {
   const audit = options.audit ?? (() => undefined);
-  const server = new McpServer({ name: 'unifi-mcp', version: '0.1.0' });
+  const server = new McpServer({ name: 'unifi-mcp', version: '0.1.0' }, { instructions: INSTRUCTIONS });
+
+  server.registerResource('unifi-guide', GUIDE_URI, {
+    title: 'UniFi gateway guide', description: 'How to use this server well: workflow, safety rules, gotchas and recipes.', mimeType: 'text/markdown',
+  }, (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: guide() }] }));
+  server.registerPrompt('unifi_guide', {
+    description: 'Load the guide to using this server (workflow, safety rules, gotchas, recipes) into the conversation.',
+  }, () => ({ messages: [{ role: 'user', content: { type: 'text', text: guide() } }] }));
 
   const guarded = (work: () => Promise<ReturnType<typeof text>>) => async () => {
     try {
