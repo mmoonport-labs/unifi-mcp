@@ -13,6 +13,14 @@ describe('release metadata', () => {
     expect(registry.packages[0].identifier).toBe(pkg.name);
   });
 
+  it('keeps the Claude Code plugin at the package version and pointing at the package', () => {
+    const plugin = json('.claude-plugin/plugin.json');
+    expect(plugin.version).toBe(pkg.version);
+    expect(plugin.mcpServers.unifi.args).toEqual(['-y', pkg.name]);
+    const market = json('.claude-plugin/marketplace.json');
+    expect(market.plugins.map((entry: { name: string }) => entry.name)).toContain(plugin.name);
+  });
+
   it('names the server the same in the package and the registry (the registry checks this)', () => {
     expect(pkg.mcpName).toBe(registry.name);
     expect(registry.name).toMatch(/^io\.github\.mmoonport-labs\//);

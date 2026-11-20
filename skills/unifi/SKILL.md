@@ -7,7 +7,7 @@ description: Manage the UniFi gateway through the unifi MCP server: Network (net
 
 The `unifi` MCP server carries the guidance for using it, so any MCP client gets the same advice. The server's instructions (already in your context) hold the core rules. **Before anything beyond a simple lookup, read the resource `unifi://guide`** (or run the prompt `unifi_guide`): the workflow, the safety rules for changes, the two APIs, the gotchas found on a real gateway, Protect and recipes. Do not guess endpoints or ids.
 
-In Claude Code the project permission rules (`.claude/settings.json`) also ask the user to approve every `unifi_write`, `unifi_delete` and `unifi_set_port_forward` call: say in your message what the call is, and never ask the user to loosen the rules to get a change through.
+Claude Code can ask the user to approve every `unifi_write`, `unifi_delete` and `unifi_set_port_forward` call (the permission rules in this repository's `.claude/settings.json`, or the ones the README gives for the plugin). Whether or not it does, say in your message what the call is, and never ask the user to loosen the rules to get a change through.
 
 ## Specs
 

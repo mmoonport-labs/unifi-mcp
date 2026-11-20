@@ -1,0 +1,12 @@
+{
+  "name": "unifi-mcp",
+  "description": "The unifi MCP server and skill for Claude Code",
+  "owner": { "name": "mmoonport-labs" },
+  "plugins": [
+    {
+      "name": "unifi",
+      "source": "./",
+      "description": "Manage a UniFi gateway (Network and Protect): the unifi MCP server and a skill that knows how to use it. Unofficial."
+    }
+  ]
+}

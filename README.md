@@ -6,7 +6,7 @@ A small [MCP](https://modelcontextprotocol.io) server for a UniFi gateway's **lo
 
 ## Install and sign in
 
-Once published (not yet), run the setup once, in a terminal:
+Needs Node 24 or newer. First sign in once, in a terminal:
 
 ```sh
 npx -y @mmoonport-labs/unifi-mcp setup
@@ -14,9 +14,22 @@ npx -y @mmoonport-labs/unifi-mcp setup
 
 It asks for the **gateway address** (an IP or URL) and an **API key** (create one in UniFi: Settings > Control Plane > Integrations; typing is hidden). It then shows the gateway's certificate fingerprint, and you approve it once: the key is only ever sent to a gateway presenting that certificate. It checks that the key works before saving anything. The address and fingerprint go to `~/.config/unifi-mcp/config.json`; the key goes to the macOS Keychain or the Linux keyring (libsecret's `secret-tool`), or, where neither exists, to a file only you can read (`~/.config/unifi-mcp/key`, mode 600). `npx -y @mmoonport-labs/unifi-mcp logout` forgets all of it.
 
-Then add the server to your MCP client with no environment variables, for Claude Code `claude mcp add unifi -- npx -y @mmoonport-labs/unifi-mcp`. Environment variables (below) still work and win over what setup saved, which suits CI and containers. A saved key and fingerprint are only used for the saved address.
+Then add it to your client, with no environment variables.
 
-Until it is published, build from source (`npm ci && npm run build`) and run `node dist/index.js setup`. Needs Node 24 or newer.
+**Claude Code, with the skill** (recommended):
+
+```
+/plugin marketplace add mmoonport-labs/unifi-mcp
+/plugin install unifi@unifi-mcp
+```
+
+This installs the server and the `unifi` skill together. See Permissions below for asking before changes: a plugin cannot set permission rules for you.
+
+**Claude Code, server only:** `claude mcp add unifi -- npx -y @mmoonport-labs/unifi-mcp`
+
+**Other clients:** see "Use with other MCP clients".
+
+Environment variables (below) still work and win over what setup saved, which suits CI and containers. A saved key and fingerprint are only used for the saved address.
 
 ## Tools
 
@@ -67,7 +80,7 @@ The catalog is every operation of Ubiquiti's official Network and Protect integr
 
 Get the fingerprint: `openssl s_client -connect 192.168.1.1:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256`
 
-## Use with Claude Code
+## Run from a source checkout (development)
 
 ```sh
 npm ci && npm run build
@@ -100,7 +113,7 @@ The server speaks standard MCP over stdio, so any client that can start a local 
 
 VS Code (Copilot) uses a `servers` key in `.vscode/mcp.json`; Codex CLI uses `[mcp_servers.unifi]` in `~/.codex/config.toml` with the same `command`, `args` and `env`. Check your client's documentation for the exact file.
 
-**The guidance travels with the server.** It sends `instructions` when a client connects, serves the longer guide (workflow, gotchas, recipes) as the resource `unifi://guide` and as the prompt `unifi_guide`, and describes every tool. It also offers four one-click read-only prompts (`network_health_check`, `who_is_on_the_network`, `troubleshoot_client`, `security_review`), which clients show as slash commands or in a prompt menu. A client that ignores instructions can still be told to read the guide. The Claude Code skill in `.claude/skills/unifi` is only a thin layer on top (spec upkeep, permissions).
+**The guidance travels with the server.** It sends `instructions` when a client connects, serves the longer guide (workflow, gotchas, recipes) as the resource `unifi://guide` and as the prompt `unifi_guide`, and describes every tool. It also offers four one-click read-only prompts (`network_health_check`, `who_is_on_the_network`, `troubleshoot_client`, `security_review`), which clients show as slash commands or in a prompt menu. A client that ignores instructions can still be told to read the guide. The Claude Code skill in `skills/unifi` is only a thin layer on top (spec upkeep, permissions).
 
 **Safety does not depend on the client.** Allow/ask/deny rules by tool name are a Claude Code feature; other clients approve tools in their own way, and some approve everything. What always applies is the server's guard: every change is a dry run unless `dry_run=false` **and** `confirm=true`. For a client you do not trust to ask first, start the server with `UNIFI_READ_ONLY=1`.
 
@@ -112,10 +125,24 @@ Ubiquiti's OpenAPI documents are not part of this repository or package. At star
 
 ## Permissions
 
-Claude Code decides, per tool, whether a call runs, asks you, or is refused. `.claude/settings.json` in this repo allows the read tools and **asks** before `unifi_write`, `unifi_set_port_forward` and `unifi_delete`. To change that, edit the rules (or put them in `~/.claude/settings.json` to apply everywhere):
+Claude Code decides, per tool, whether a call runs, asks you, or is refused. `.claude/settings.json` in this repo (for a checkout) allows the read tools and **asks** before `unifi_write`, `unifi_set_port_forward` and `unifi_delete`. To change that, edit the rules (or put them in `~/.claude/settings.json` to apply everywhere):
 
 ```json
 { "permissions": { "allow": ["mcp__unifi__unifi_write"], "deny": ["mcp__unifi__unifi_delete"] } }
+```
+
+**Installed as the plugin**, the tool names carry the plugin's name (`mcp__plugin_unifi_unifi__unifi_write`), and your settings are yours to write. To ask before every change, put this in `~/.claude/settings.json` (or a project's `.claude/settings.json`):
+
+```json
+{
+  "permissions": {
+    "ask": [
+      "mcp__plugin_unifi_unifi__unifi_write",
+      "mcp__plugin_unifi_unifi__unifi_delete",
+      "mcp__plugin_unifi_unifi__unifi_set_port_forward"
+    ]
+  }
+}
 ```
 
 Allowing `unifi_write` without asking leaves only the dry-run and `confirm=true` guard, which the model fills in itself, so keep it on `ask` unless you trust the session. For a server that can never change anything, start it with `-e UNIFI_READ_ONLY=1`.
@@ -126,4 +153,4 @@ Allowing `unifi_write` without asking leaves only the dry-run and `confirm=true`
 
 ## Status
 
-Tested in simulation (fake gateway, local TLS). Read tools, `unifi_search_api` and `unifi_call` (official and legacy) were exercised against a real UDM Pro (Network 11.0.99) on 2026-11-20. **A real write has been run once**: `unifi_write` with `legacy_update_port_forward` disabled and re-enabled the "Desk test" rule (dry run, apply, read back, revert), and the gateway moved the rule to the end of the list. Other write operations (create, delete, networks, firewall policies, Wi-Fi) have not been run against a real gateway; dry-run first and read the record back afterwards. The bundled specs match the gateway (Network 11.0.99, Protect 7.3.74); the gateway itself serves no spec.
+Early (0.1). Tested in simulation (a fake gateway and local TLS) and against one real UDM Pro (Network 11.0.99, Protect 7.3.74). All the reads were run for real. Writes run for real so far are listed in `guide/guide.md` (under "When something fails"): legacy port forwards, a client rename, Wi-Fi settings and deletes, a network delete, and several official firewall policy and traffic list changes, plus a PoE power cycle. Every other write is untested: dry-run it first and read the record back afterwards. The gateway itself serves no API spec; the server fetches the one for its version (see "API specs"). UniFi Access is not covered.
