@@ -1,0 +1,13 @@
+{
+  "name": "unifi",
+  "version": "0.1.0",
+  "description": "Manage a UniFi gateway (Network and Protect) from Claude Code: the unifi MCP server and a skill that knows how to use it. Unofficial.",
+  "author": { "name": "mmoonport-labs" },
+  "homepage": "https://github.com/mmoonport-labs/unifi-mcp#readme",
+  "repository": "https://github.com/mmoonport-labs/unifi-mcp",
+  "license": "MIT",
+  "keywords": ["unifi", "ubiquiti", "network", "router", "mcp"],
+  "mcpServers": {
+    "unifi": { "command": "npx", "args": ["-y", "@mmoonport-labs/unifi-mcp"] }
+  }
+}
