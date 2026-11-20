@@ -1,0 +1,56 @@
+name: Release (stage on npm)
+
+# Push a tag like v0.2.0 on main. This builds, tests and STAGES the package on npm using trusted publishing (OIDC, with
+# provenance): no token is stored anywhere. A maintainer then approves the staged version on npmjs.com (2FA), and runs the
+# "Publish to the MCP Registry" workflow. See RELEASING.md.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write   # trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the tag
+        run: |
+          set -eu
+          git fetch --quiet origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::$GITHUB_REF_NAME is not on main"; exit 1; }
+          VERSION="${GITHUB_REF_NAME#v}" node --input-type=module -e "
+            import { readFileSync } from 'node:fs';
+            const read = (file) => JSON.parse(readFileSync(file, 'utf8'));
+            const want = process.env.VERSION;
+            const server = read('server.json');
+            const found = { 'package.json': read('package.json').version, '.claude-plugin/plugin.json': read('.claude-plugin/plugin.json').version, 'server.json': server.version, 'server.json packages[0]': server.packages[0].version };
+            const bad = Object.entries(found).filter(([, version]) => version !== want);
+            if (bad.length > 0) { console.error('The tag says ' + want + ' but: ' + bad.map(([file, version]) => file + ' is ' + version).join(', ')); process.exit(1); }
+          "
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or newer and staging needs 11.15.0 or newer.
+      - run: npm install --global npm@11.19.1
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Stage the package on npm
+        run: npm stage publish --access public
+      - name: Next steps
+        run: |
+          {
+            echo "### Staged $GITHUB_REF_NAME on npm"
+            echo "1. Approve it (2FA): https://www.npmjs.com/package/@mmoonport-labs/unifi-mcp (Staged Packages), or \`npm stage list\` then \`npm stage approve <id>\`."
+            echo "2. Then run the **Publish to the MCP Registry** workflow with version \`${GITHUB_REF_NAME#v}\`."
+          } >> "$GITHUB_STEP_SUMMARY"
