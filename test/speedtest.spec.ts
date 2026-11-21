@@ -93,6 +93,14 @@ describe('unifi_speedtest', () => {
     expect(r.display).toBe('↓ 3100 Mbps [██████░░░░] 5000   ↑ 2900 Mbps [██████░░░░] 5000   4 ms');
   });
 
+  it('waits for the upload figure: the gateway says finished one reading before it fills it in', async () => {
+    const { run } = await connect([OLD, STARTED,
+      reading({ status_summary: 1, rundate: 0, xput_download: 1918, xput_upload: 0 }),
+      reading({ status_summary: 2, rundate: 0, xput_download: 1918, xput_upload: 0, runtime: 0 }),
+      reading({ status_summary: 2, rundate: 200, xput_download: 1918, xput_upload: 2251, runtime: 13 })]);
+    expect(JSON.parse((await run({ dry_run: false, confirm: true })).text).result).toMatchObject({ download_mbps: 1918, upload_mbps: 2251, test_seconds: 13 });
+  });
+
   it('does not take the previous test\'s result for the new one', async () => {
     const { run } = await connect([OLD, STARTED, OLD, OLD, reading({ status_summary: 2, rundate: 200, xput_download: 1000, xput_upload: 500, latency: 9 })]);
     expect(JSON.parse((await run({ dry_run: false, confirm: true })).text).result.download_mbps).toBe(1000);

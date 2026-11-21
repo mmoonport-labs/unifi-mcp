@@ -75,7 +75,8 @@ export function registerSpeedtest(server: McpServer, udm: Udm, options: Speedtes
         shown = line(now, scale);
         polls += 1;
         if (token !== undefined) await extra.sendNotification({ method: 'notifications/progress', params: { progressToken: token, progress: polls, message: shown } });
-        if (now.status_summary === 2 && (sawRunning || stamp(now) > previous)) {
+        // The gateway marks the test finished (status_summary 2) one reading before it fills in the upload speed, so wait for that too.
+        if (now.status_summary === 2 && num(now.xput_upload) > 0 && (sawRunning || stamp(now) > previous)) {
           return text({ applied: true, result: { download_mbps: num(now.xput_download), upload_mbps: num(now.xput_upload), latency_ms: num(now.latency), test_seconds: num(now.runtime) }, display: shown });
         }
       }
