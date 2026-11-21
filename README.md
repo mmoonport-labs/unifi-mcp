@@ -52,7 +52,7 @@ Three more tools cover the rest of the gateway API without a tool per endpoint:
 | `unifi_write` | **changes the router**: run a create or update operation; dry run by default |
 | `unifi_delete` | **deletes**: run a delete operation; dry run by default |
 
-The catalog is every operation of Ubiquiti's official Network and Protect integration APIs (about 70 each), plus a table of the legacy Network endpoints the official API does not cover (read and write for firewall, networks, Wi-Fi, port forwards and clients; read only for rogue APs, DPI, hotspot, RADIUS, scheduled tasks and the newer v2 API's traffic rules, static DNS, NAT, ACL and QoS rules). See "API specs" below for where the OpenAPI documents come from.
+The catalog is every operation of Ubiquiti's official Network and Protect integration APIs (about 70 each), plus a table of the legacy Network endpoints the official API does not cover (read and write for firewall, networks, Wi-Fi, port forwards and clients; read only for the speed test status (and a guarded write to start one), rogue APs, DPI, hotspot, RADIUS, scheduled tasks and the newer v2 API's traffic rules, static DNS, NAT, ACL and QoS rules). See "API specs" below for where the OpenAPI documents come from.
 
 ### How the write tool is guarded
 
