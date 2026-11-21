@@ -28,9 +28,21 @@ export function bar(value: number, scale: number): string {
 
 const num = (value: number | undefined): number => value ?? 0;
 
-export function line(status: Status, scale: number): string {
+export interface Scales { down: number; up: number }
+
+export function line(status: Status, scales: Scales): string {
   const [down, up] = [num(status.xput_download), num(status.xput_upload)];
-  return `↓ ${String(down)} Mbps ${bar(down, scale)} ${String(scale)}   ↑ ${String(up)} Mbps ${bar(up, scale)} ${String(scale)}   ${String(num(status.latency))} ms`;
+  return `↓ ${String(down)} Mbps ${bar(down, scales.down)} ${String(scales.down)}   ↑ ${String(up)} Mbps ${bar(up, scales.up)} ${String(scales.up)}   ${String(num(status.latency))} ms`;
+}
+
+interface Network { purpose?: string; wan_networkgroup?: string; wan_provider_capabilities?: { download_kilobits_per_second?: number; upload_kilobits_per_second?: number } }
+
+// The speeds the owner entered for the main internet connection (Mbps), if the gateway has them: the WAN network, else the first one.
+export function providerSpeeds(networks: Network[]): Scales | undefined {
+  const wans = networks.filter((network) => network.purpose === 'wan');
+  const caps = (wans.find((network) => network.wan_networkgroup === 'WAN') ?? wans[0])?.wan_provider_capabilities;
+  const [down, up] = [(caps?.download_kilobits_per_second ?? 0) / 1000, (caps?.upload_kilobits_per_second ?? 0) / 1000];
+  return down > 0 && up > 0 ? { down, up } : undefined;
 }
 
 const stamp = (status: Status): number => num(status.rundate ?? status.timestamp);
@@ -42,16 +54,24 @@ export function registerSpeedtest(server: McpServer, udm: Udm, options: Speedtes
   const audit = options.audit ?? (() => undefined);
   const [pollMs, timeoutMs] = [options.pollMs ?? 1000, options.timeoutMs ?? 90_000];
   const path = udm.legacy('cmd/devmgr');
+  const networks = async (): Promise<Network[]> => {
+    try {
+      const { data } = await udm.get<{ data?: unknown }>(udm.legacy('rest/networkconf'));
+      return Array.isArray(data) ? data as Network[] : [];
+    } catch {
+      return []; // only a nicer scale is lost
+    }
+  };
   const status = async (): Promise<Status> => ((await udm.send<{ data?: Status[] }>('POST', path, { cmd: 'speedtest-status' })).data ?? [])[0] ?? {};
 
   server.registerTool('unifi_speedtest', {
     description: 'CHANGES THE ROUTER\'S LOAD: starts a speed test of the internet connection, which uses the whole WAN link for about 15 to 30 seconds, and reports live progress '
-      + '(download and upload in Mbps against a scale, and latency) while it runs. Defaults to a dry run; apply with dry_run=false AND confirm=true, only after the owner has said to. '
+      + '(download and upload in Mbps against the speeds set for the main WAN in UniFi, or scale_mbps, and latency) while it runs. Defaults to a dry run; apply with dry_run=false AND confirm=true, only after the owner has said to. '
       + 'Answers with the final download, upload and latency.',
     inputSchema: {
       dry_run: z.boolean().default(true).describe('true (the default) only shows the request'),
       confirm: z.boolean().default(false).describe('required together with dry_run=false'),
-      scale_mbps: z.number().min(10).max(100_000).optional().describe('the full length of the progress bars in Mbps (default 2500; widened if a reading goes past it)'),
+      scale_mbps: z.number().min(10).max(100_000).optional().describe('the full length of both progress bars in Mbps. Default: the download and upload speeds set for the main WAN in UniFi, else 2500. Widened if a reading goes past it'),
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
   }, async (args, extra) => {
@@ -61,23 +81,31 @@ export function registerSpeedtest(server: McpServer, udm: Udm, options: Speedtes
       if (args.dry_run) return text({ dryRun: true, request, warning: 'The test uses the whole WAN link for about 15 to 30 seconds.', next: 'Pass dry_run=false and confirm=true to apply.' });
       if (!args.confirm) return failure('Not applied: confirm=true is required to start a speed test.');
       const previous = stamp(await status());
+      const expected = providerSpeeds(await networks());
       await udm.send('POST', path, request.body);
       audit(`applied speedtest POST ${path} body ${JSON.stringify(request.body)}`);
       const started = Date.now();
       const token = extra._meta?.progressToken;
-      let [scale, polls, sawRunning, shown] = [args.scale_mbps ?? 2500, 0, false, ''];
+      let scales = args.scale_mbps === undefined ? expected ?? { down: 2500, up: 2500 } : { down: args.scale_mbps, up: args.scale_mbps };
+      let [polls, sawRunning, shown] = [0, false, ''];
       while (Date.now() - started < timeoutMs) {
         await sleep(pollMs);
         if (extra.signal.aborted) return failure('Cancelled. The gateway may still finish the test: read legacy_get_speedtest_status.');
         const now = await status();
         sawRunning ||= now.status_summary === 1;
-        scale = scaleFor(Math.max(num(now.xput_download), num(now.xput_upload)), scale);
-        shown = line(now, scale);
+        scales = { down: scaleFor(num(now.xput_download), scales.down), up: scaleFor(num(now.xput_upload), scales.up) };
+        shown = line(now, scales);
         polls += 1;
         if (token !== undefined) await extra.sendNotification({ method: 'notifications/progress', params: { progressToken: token, progress: polls, message: shown } });
         // The gateway marks the test finished (status_summary 2) one reading before it fills in the upload speed, so wait for that too.
         if (now.status_summary === 2 && num(now.xput_upload) > 0 && (sawRunning || stamp(now) > previous)) {
-          return text({ applied: true, result: { download_mbps: num(now.xput_download), upload_mbps: num(now.xput_upload), latency_ms: num(now.latency), test_seconds: num(now.runtime) }, display: shown });
+          const percent = (got: number | undefined, want: number) => Math.round((num(got) / want) * 100);
+          return text({
+            applied: true,
+            result: { download_mbps: num(now.xput_download), upload_mbps: num(now.xput_upload), latency_ms: num(now.latency), test_seconds: num(now.runtime) },
+            ...(expected === undefined ? {} : { expected: { download_mbps: expected.down, upload_mbps: expected.up, download_percent: percent(now.xput_download, expected.down), upload_percent: percent(now.xput_upload, expected.up) } }),
+            display: shown,
+          });
         }
       }
       return failure(`The speed test did not finish within ${String(Math.round(timeoutMs / 1000))} s. Last reading: ${shown === '' ? 'none' : shown}. Read legacy_get_speedtest_status for the result later.`);

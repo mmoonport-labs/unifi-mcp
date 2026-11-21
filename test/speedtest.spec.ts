@@ -1,12 +1,13 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { bar, line, scaleFor } from '../src/speedtest.js';
+import { bar, line, providerSpeeds, scaleFor } from '../src/speedtest.js';
 import { createServer, type ServerOptions } from '../src/tools.js';
 import { Udm } from '../src/udm.js';
 import { fakeUdm } from './fake-udm.js';
 
 const DEV = '/proxy/network/api/s/default/cmd/devmgr';
+const NETS = '/proxy/network/api/s/default/rest/networkconf';
 let cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const c of cleanup) await c(); cleanup = []; });
 
@@ -15,9 +16,12 @@ const OLD = reading({ status_summary: 2, rundate: 100, xput_download: 808, xput_
 const STARTED = JSON.stringify({ meta: { rc: 'ok' }, data: [] });
 
 // The gateway's answers to POST cmd/devmgr in order (the last one repeats): first the status before the test, then the start, then the polls.
-async function connect(script: string[], options: ServerOptions = {}) {
+async function connect(script: string[], options: ServerOptions = {}, networks?: unknown) {
   let n = 0;
-  const fake = await fakeUdm({ [`POST ${DEV}`]: () => ({ status: 200, body: script[Math.min(n++, script.length - 1)] }) });
+  const fake = await fakeUdm({
+    [`POST ${DEV}`]: () => ({ status: 200, body: script[Math.min(n++, script.length - 1)] }),
+    ...(networks === undefined ? {} : { [`GET ${NETS}`]: () => ({ status: 200, body: JSON.stringify({ meta: { rc: 'ok' }, data: networks }) }) }),
+  });
   const server = createServer(new Udm({ baseUrl: fake.url, apiKey: 'k' }), { speedtest: { pollMs: 1, timeoutMs: 3000 }, ...options });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 't', version: '0' });
@@ -42,8 +46,16 @@ describe('the bars', () => {
     expect(scaleFor(250_000, 2500)).toBe(300_000);
   });
   it('shows both speeds and the latency on one line', () => {
-    expect(line({ xput_download: 1250, xput_upload: 0, latency: 15 }, 2500)).toBe('↓ 1250 Mbps [█████░░░░░] 2500   ↑ 0 Mbps [░░░░░░░░░░] 2500   15 ms');
-    expect(line({}, 100)).toBe('↓ 0 Mbps [░░░░░░░░░░] 100   ↑ 0 Mbps [░░░░░░░░░░] 100   0 ms');
+    expect(line({ xput_download: 1250, xput_upload: 0, latency: 15 }, { down: 2500, up: 2500 })).toBe('↓ 1250 Mbps [█████░░░░░] 2500   ↑ 0 Mbps [░░░░░░░░░░] 2500   15 ms');
+    expect(line({}, { down: 100, up: 200 })).toBe('↓ 0 Mbps [░░░░░░░░░░] 100   ↑ 0 Mbps [░░░░░░░░░░] 200   0 ms');
+  });
+  it('reads the provider speeds of the main WAN, in Mbps', () => {
+    const wan = (group: string, down: number, up: number) => ({ purpose: 'wan', wan_networkgroup: group, wan_provider_capabilities: { download_kilobits_per_second: down, upload_kilobits_per_second: up } });
+    expect(providerSpeeds([{ purpose: 'corporate' }, wan('WAN2', 100_000, 50_000), wan('WAN', 2_339_000, 2_403_000)])).toEqual({ down: 2339, up: 2403 });
+    expect(providerSpeeds([wan('WAN2', 100_000, 50_000)])).toEqual({ down: 100, up: 50 });
+    expect(providerSpeeds([{ purpose: 'wan' }, { purpose: 'corporate' }])).toBeUndefined();
+    expect(providerSpeeds([wan('WAN', 0, 5)])).toBeUndefined();
+    expect(providerSpeeds([])).toBeUndefined();
   });
 });
 
@@ -83,8 +95,28 @@ describe('unifi_speedtest', () => {
       '↓ 2206 Mbps [█████████░] 2500   ↑ 900 Mbps [████░░░░░░] 2500   15 ms',
       '↓ 2206 Mbps [█████████░] 2500   ↑ 2321 Mbps [█████████░] 2500   15 ms',
     ]);
-    expect(fake.seen.map((s) => s.body)).toEqual(['status', 'start', 'p', 'p', 'p'].map((kind) => JSON.stringify({ cmd: kind === 'start' ? 'speedtest' : 'speedtest-status' })));
+    expect(fake.seen.filter((s) => s.url === DEV).map((s) => s.body)).toEqual(['status', 'start', 'p', 'p', 'p'].map((kind) => JSON.stringify({ cmd: kind === 'start' ? 'speedtest' : 'speedtest-status' })));
     expect(audit).toEqual([`applied speedtest POST ${DEV} body {"cmd":"speedtest"}`]);
+  });
+
+  it('uses the speeds set in UniFi as the scales, and says how much of them the test reached', async () => {
+    const nets = [{ purpose: 'wan', wan_networkgroup: 'WAN', wan_provider_capabilities: { download_kilobits_per_second: 2_000_000, upload_kilobits_per_second: 1_000_000 } }];
+    const { run } = await connect([OLD, STARTED, reading({ status_summary: 2, rundate: 300, xput_download: 1000, xput_upload: 900, latency: 4, runtime: 13 })], {}, nets);
+    const messages: string[] = [];
+    const r = JSON.parse((await run({ dry_run: false, confirm: true }, (m) => messages.push(m))).text);
+    expect(messages).toEqual(['↓ 1000 Mbps [█████░░░░░] 2000   ↑ 900 Mbps [█████████░] 1000   4 ms']);
+    expect(r.expected).toEqual({ download_mbps: 2000, upload_mbps: 1000, download_percent: 50, upload_percent: 90 });
+    const own = JSON.parse((await (await connect([OLD, STARTED, reading({ status_summary: 2, rundate: 300, xput_download: 1000, xput_upload: 900 })], {}, nets)).run({ dry_run: false, confirm: true, scale_mbps: 4000 })).text);
+    expect(own.display).toBe('↓ 1000 Mbps [███░░░░░░░] 4000   ↑ 900 Mbps [██░░░░░░░░] 4000   0 ms');
+  });
+
+  it('falls back to 2500 when the gateway has no provider speeds or cannot be asked', async () => {
+    const none = await connect([OLD, STARTED, reading({ status_summary: 2, rundate: 300, xput_download: 10, xput_upload: 10 })], {}, [{ purpose: 'corporate' }]);
+    const r = JSON.parse((await none.run({ dry_run: false, confirm: true })).text);
+    expect(r.display).toContain('2500   ↑');
+    expect(r.expected).toBeUndefined();
+    const lacking = await connect([OLD, STARTED, reading({ status_summary: 2, rundate: 300, xput_download: 10, xput_upload: 10 })], {}, { not: 'a list' });
+    expect(JSON.parse((await lacking.run({ dry_run: false, confirm: true })).text).display).toContain('2500   ↑');
   });
 
   it('works without progress and widens the scale for a faster link', async () => {

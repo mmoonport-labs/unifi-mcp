@@ -41,7 +41,7 @@ Environment variables (below) still work and win over what setup saved, which su
 | `unifi_list_devices` | adopted devices (name, model, firmware, state) |
 | `unifi_list_clients` | connected clients |
 | `unifi_set_port_forward` | **changes the router**: enable or disable a rule, or change its LAN target (`fwd`, `fwd_port`) or WAN port (`dst_port`) |
-| `unifi_speedtest` | **loads the WAN link for 15 to 30 seconds**: runs a speed test with live progress (download and upload bars, latency) as MCP progress notifications, then returns the result; dry run by default |
+| `unifi_speedtest` | **loads the WAN link for 15 to 30 seconds**: runs a speed test with live progress (download and upload bars against the speeds you set for your WAN in UniFi, and latency) as MCP progress notifications, then returns the result and the percentage of those speeds reached; dry run by default |
 
 Three more tools cover the rest of the gateway API without a tool per endpoint:
 
