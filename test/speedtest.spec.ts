@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { bar, line, providerSpeeds, scaleFor } from '../src/speedtest.js';
+import { bar, line, phase, providerSpeeds, scaleFor } from '../src/speedtest.js';
 import { createServer, type ServerOptions } from '../src/tools.js';
 import { Udm } from '../src/udm.js';
 import { fakeUdm } from './fake-udm.js';
@@ -49,6 +49,14 @@ describe('the bars', () => {
     expect(line({ xput_download: 1250, xput_upload: 0, latency: 15 }, { down: 2500, up: 2500 })).toBe('↓ 1250 Mbps [█████░░░░░] 2500   ↑ 0 Mbps [░░░░░░░░░░] 2500   15 ms');
     expect(line({}, { down: 100, up: 200 })).toBe('↓ 0 Mbps [░░░░░░░░░░] 100   ↑ 0 Mbps [░░░░░░░░░░] 200   0 ms');
   });
+  it('names the phase from the gateway\'s status codes', () => {
+    expect(phase({})).toBe('starting');
+    expect(phase({ status_summary: 1, status_download: 0, status_upload: 0 })).toBe('measuring latency');
+    expect(phase({ status_summary: 1, status_download: 1, status_upload: 0 })).toBe('testing download');
+    expect(phase({ status_summary: 1, status_download: 2, status_upload: 1 })).toBe('testing upload');
+    expect(phase({ status_summary: 2, status_download: 2, status_upload: 2 })).toBe('testing upload');   // the early "finished" flicker
+    expect(phase({ status_summary: 2, status_download: 2, status_upload: 2, xput_upload: 2265 })).toBe('finishing');
+  });
   it('reads the provider speeds of the main WAN, in Mbps', () => {
     const wan = (group: string, down: number, up: number) => ({ purpose: 'wan', wan_networkgroup: group, wan_provider_capabilities: { download_kilobits_per_second: down, upload_kilobits_per_second: up } });
     expect(providerSpeeds([{ purpose: 'corporate' }, wan('WAN2', 100_000, 50_000), wan('WAN', 2_339_000, 2_403_000)])).toEqual({ down: 2339, up: 2403 });
@@ -89,8 +97,9 @@ describe('unifi_speedtest', () => {
     ], { audit: (l) => audit.push(l) });
     const messages: string[] = [];
     const r = await run({ dry_run: false, confirm: true }, (m) => messages.push(m));
+    expect(messages.every((m) => /^\d+s (starting|measuring latency|testing download|testing upload|finishing): /.test(m))).toBe(true);
     expect(JSON.parse(r.text)).toMatchObject({ applied: true, result: { download_mbps: 2206, upload_mbps: 2321, latency_ms: 15, test_seconds: 13 } });
-    expect(messages).toEqual([
+    expect(messages.map((m) => m.replace(/^\d+s [^:]+: /, ''))).toEqual([
       '↓ 600 Mbps [██░░░░░░░░] 2500   ↑ 0 Mbps [░░░░░░░░░░] 2500   15 ms',
       '↓ 2206 Mbps [█████████░] 2500   ↑ 900 Mbps [████░░░░░░] 2500   15 ms',
       '↓ 2206 Mbps [█████████░] 2500   ↑ 2321 Mbps [█████████░] 2500   15 ms',
@@ -104,7 +113,7 @@ describe('unifi_speedtest', () => {
     const { run } = await connect([OLD, STARTED, reading({ status_summary: 2, rundate: 300, xput_download: 1000, xput_upload: 900, latency: 4, runtime: 13 })], {}, nets);
     const messages: string[] = [];
     const r = JSON.parse((await run({ dry_run: false, confirm: true }, (m) => messages.push(m))).text);
-    expect(messages).toEqual(['↓ 1000 Mbps [█████░░░░░] 2000   ↑ 900 Mbps [█████████░] 1000   4 ms']);
+    expect(messages.map((m) => m.replace(/^\d+s [^:]+: /, ''))).toEqual(['↓ 1000 Mbps [█████░░░░░] 2000   ↑ 900 Mbps [█████████░] 1000   4 ms']);
     expect(r.expected).toEqual({ download_mbps: 2000, upload_mbps: 1000, download_percent: 50, upload_percent: 90 });
     const own = JSON.parse((await (await connect([OLD, STARTED, reading({ status_summary: 2, rundate: 300, xput_download: 1000, xput_upload: 900 })], {}, nets)).run({ dry_run: false, confirm: true, scale_mbps: 4000 })).text);
     expect(own.display).toBe('↓ 1000 Mbps [███░░░░░░░] 4000   ↑ 900 Mbps [██░░░░░░░░] 4000   0 ms');

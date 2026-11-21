@@ -10,7 +10,7 @@ export interface SpeedtestOptions {
   timeoutMs?: number;
 }
 
-interface Status { status_summary?: number; xput_download?: number; xput_upload?: number; latency?: number; runtime?: number; rundate?: number; timestamp?: number }
+interface Status { status_summary?: number; status_download?: number; status_upload?: number; xput_download?: number; xput_upload?: number; latency?: number; runtime?: number; rundate?: number; timestamp?: number }
 
 const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] });
 const failure = (message: string) => ({ isError: true, content: [{ type: 'text' as const, text: message }] });
@@ -43,6 +43,16 @@ export function providerSpeeds(networks: Network[]): Scales | undefined {
   const caps = (wans.find((network) => network.wan_networkgroup === 'WAN') ?? wans[0])?.wan_provider_capabilities;
   const [down, up] = [(caps?.download_kilobits_per_second ?? 0) / 1000, (caps?.upload_kilobits_per_second ?? 0) / 1000];
   return down > 0 && up > 0 ? { down, up } : undefined;
+}
+
+// What the gateway is doing, from its per-phase status codes (seen: 0 not started, 1 running, 2 done). It does not report speeds during
+// a phase, only when it ends, so this label and the elapsed time are what change from one reading to the next.
+export function phase(status: Status): string {
+  if (num(status.xput_upload) > 0) return 'finishing';
+  // The gateway briefly says "finished" before the upload figure is in, so the figure decides, not the flag.
+  if (status.status_upload === 1 || status.status_download === 2) return 'testing upload';
+  if (status.status_download === 1) return 'testing download';
+  return status.status_summary === 1 ? 'measuring latency' : 'starting';
 }
 
 const stamp = (status: Status): number => num(status.rundate ?? status.timestamp);
@@ -96,7 +106,7 @@ export function registerSpeedtest(server: McpServer, udm: Udm, options: Speedtes
         scales = { down: scaleFor(num(now.xput_download), scales.down), up: scaleFor(num(now.xput_upload), scales.up) };
         shown = line(now, scales);
         polls += 1;
-        if (token !== undefined) await extra.sendNotification({ method: 'notifications/progress', params: { progressToken: token, progress: polls, message: shown } });
+        if (token !== undefined) await extra.sendNotification({ method: 'notifications/progress', params: { progressToken: token, progress: polls, message: `${String(Math.round((Date.now() - started) / 1000))}s ${phase(now)}: ${shown}` } });
         // The gateway marks the test finished (status_summary 2) one reading before it fills in the upload speed, so wait for that too.
         if (now.status_summary === 2 && num(now.xput_upload) > 0 && (sawRunning || stamp(now) > previous)) {
           const percent = (got: number | undefined, want: number) => Math.round((num(got) / want) * 100);
