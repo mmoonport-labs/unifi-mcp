@@ -172,14 +172,14 @@ export function registerApiTools(server: McpServer, udm: Udm, options: ApiToolOp
       const notes = warnings.length === 0 ? {} : { warnings };
       const path = `${await resolvePath(op, args.path_params ?? {})}${queryString(op, args.query ?? {})}`;
       if (tool === 'read' && op.response === 'image') return image(await udm.getBinary(path));
-      if (tool === 'read') return text(trim(await udm.get(path), args.fields));
+      if (tool === 'read') return text(trim(op.fixedBody === undefined ? await udm.get(path) : await udm.send(op.method, path, op.fixedBody), args.fields));
       const before = await current(op, path.split('?')[0]!);
-      const body = op.merge ? { ...(before as Json), ...args.body } : args.body;
+      const body = op.fixedBody ?? (op.merge ? { ...(before as Json), ...args.body } : args.body);
       const request = { method: op.method, path, body };
       if (args.dry_run !== false) return text({ dryRun: true, operation: op.id, request, before, ...notes, next: 'Pass dry_run=false and confirm=true to apply.' });
       if (args.confirm !== true) return failure('Not applied: confirm=true is required to change the router.');
       const answer = await udm.send(op.method, path, body);
-      audit(`applied ${op.id} ${op.method} ${path}${tool === 'delete' ? '' : ` body ${JSON.stringify(redact(args.body))}`}; before ${JSON.stringify(redact(before))}`);
+      audit(`applied ${op.id} ${op.method} ${path}${tool === 'delete' ? '' : ` body ${JSON.stringify(redact(op.fixedBody ?? args.body))}`}; before ${JSON.stringify(redact(before))}`);
       return text({ applied: true, operation: op.id, request, before, ...notes, answer: trim(answer, args.fields) });
     } catch (error) {
       if (error instanceof UdmError) return failure(error.message);

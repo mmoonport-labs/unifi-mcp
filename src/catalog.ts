@@ -38,6 +38,8 @@ export interface Operation {
   // Why this server cannot run it (a WebSocket stream, a file upload); it is listed so it can be found and explained.
   unsupported?: string;
   risk: Risk;
+  // A command the server sends itself (the speed test): the caller passes no body.
+  fixedBody?: Record<string, unknown>;
   // Legacy PUT replaces the whole object, so the caller's fields are merged over the current row before sending.
   merge?: boolean;
 }
@@ -217,6 +219,9 @@ function legacyOperations(): Operation[] {
   }
   operations.push(
     { ...base, id: 'legacy_device_command', method: 'POST', path: 'cmd/devmgr', summary: 'Run a device command such as restart, provision or locate: body {cmd, mac} (legacy API).', description: '', params: [], hasBody: true, bodyRequired: true, risk: 'write' },
+    // The speed test is a command to the device manager. Its body is fixed here so the read (status) and the write (start) cannot be mixed up.
+    { ...base, id: 'legacy_get_speedtest_status', method: 'POST', path: 'cmd/devmgr', summary: 'Read the state and result of the latest speed test: xput_download and xput_upload in Mbps, latency in ms; status_summary was seen as 0 not started, 1 running, 2 finished (legacy API). Sends the command speedtest-status; it does not start a test.', description: '', params: [], hasBody: false, bodyRequired: false, risk: 'read', bodySchema: undefined, fixedBody: { cmd: 'speedtest-status' } },
+    { ...base, id: 'legacy_start_speedtest', method: 'POST', path: 'cmd/devmgr', summary: 'Start a speed test of the internet connection (legacy API). It uses the whole WAN link for about 15 to 30 seconds. It takes no body; read the result with legacy_get_speedtest_status.', description: '', params: [], hasBody: false, bodyRequired: false, risk: 'write', bodySchema: undefined, fixedBody: { cmd: 'speedtest' } },
     { ...base, id: 'legacy_client_command', method: 'POST', path: 'cmd/stamgr', summary: 'Run a client command such as block-sta, unblock-sta or kick-sta: body {cmd, mac} (legacy API).', description: '', params: [], hasBody: true, bodyRequired: true, risk: 'write' },
   );
   return operations;

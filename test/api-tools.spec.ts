@@ -211,6 +211,30 @@ describe('unifi_call reads', () => {
     for (const id of ['legacy_create_radius_profile', 'legacy_update_radius_profile', 'legacy_delete_radius_profile', 'v2_create_static_dns']) expect(findOperation(id)).toBeUndefined();
     expect(OPERATIONS.filter((o) => o.id.startsWith('v2_')).every((o) => o.risk === 'read' && o.tags.includes('v2'))).toBe(true);
   });
+  it('reads the speed test status with a fixed command, and takes no body', async () => {
+    const DEV = `${LEGACY}cmd/devmgr`;
+    const { call, fake } = await connect({}, { [`POST ${DEV}`]: ok({ meta: { rc: 'ok' }, data: [{ xput_download: 808, xput_upload: 304, latency: 26, status_summary: 2, server: 's' }] }) });
+    const r = JSON.parse((await call('unifi_call', { operation: 'legacy_get_speedtest_status', fields: ['xput_download', 'status_summary'] })).text);
+    expect(r.data).toEqual([{ xput_download: 808, status_summary: 2 }]);
+    expect(fake.seen.filter((s) => s.url === DEV).map((s) => [s.method, s.body])).toEqual([['POST', JSON.stringify({ cmd: 'speedtest-status' })]]);
+    expect((await call('unifi_call', { operation: 'legacy_get_speedtest_status', body: { cmd: 'speedtest' } })).text).toContain('takes no body');
+    expect(findOperation('legacy_get_speedtest_status')!.risk).toBe('read');
+  });
+  it('starts a speed test only through the guarded write, with a fixed command', async () => {
+    const DEV = `${LEGACY}cmd/devmgr`;
+    const audit: string[] = [];
+    const { call, fake } = await connect({ audit: (line) => audit.push(line) }, { [`POST ${DEV}`]: ok({ meta: { rc: 'ok' }, data: [] }) });
+    expect((await call('unifi_call', { operation: 'legacy_start_speedtest' })).text).toContain('use unifi_write');
+    expect((await call('unifi_write', { operation: 'legacy_start_speedtest', body: { cmd: 'restart' } })).text).toContain('takes no body');
+    const dry = JSON.parse((await call('unifi_write', { operation: 'legacy_start_speedtest' })).text);
+    expect(dry).toMatchObject({ dryRun: true, request: { method: 'POST', body: { cmd: 'speedtest' } } });
+    expect(fake.seen.filter((s) => s.url === DEV)).toHaveLength(0);
+    expect((await call('unifi_write', { operation: 'legacy_start_speedtest', dry_run: false })).error).toBe(true);
+    const applied = JSON.parse((await call('unifi_write', { operation: 'legacy_start_speedtest', dry_run: false, confirm: true })).text);
+    expect(applied).toMatchObject({ applied: true, answer: { meta: { rc: 'ok' } } });
+    expect(fake.seen.filter((s) => s.url === DEV).map((s) => s.body)).toEqual([JSON.stringify({ cmd: 'speedtest' })]);
+    expect(audit[0]).toContain('body {"cmd":"speedtest"}');
+  });
   it('finds the new reads by what they are called', () => {
     expect(search('rogue ap', {}, 5).operations.some((o) => o.id === 'legacy_get_rogue_aps')).toBe(true);
     expect(search('static dns', {}, 5).operations.some((o) => o.id === 'v2_list_static_dns')).toBe(true);
