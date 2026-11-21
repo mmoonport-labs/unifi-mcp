@@ -13,6 +13,7 @@
     "ask": [
       "mcp__unifi__unifi_write",
       "mcp__unifi__unifi_set_port_forward",
+      "mcp__unifi__unifi_speedtest",
       "mcp__unifi__unifi_delete"
     ]
   }

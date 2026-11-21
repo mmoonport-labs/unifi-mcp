@@ -41,6 +41,7 @@ Environment variables (below) still work and win over what setup saved, which su
 | `unifi_list_devices` | adopted devices (name, model, firmware, state) |
 | `unifi_list_clients` | connected clients |
 | `unifi_set_port_forward` | **changes the router**: enable or disable a rule, or change its LAN target (`fwd`, `fwd_port`) or WAN port (`dst_port`) |
+| `unifi_speedtest` | **loads the WAN link for 15 to 30 seconds**: runs a speed test with live progress (download and upload bars, latency) as MCP progress notifications, then returns the result; dry run by default |
 
 Three more tools cover the rest of the gateway API without a tool per endpoint:
 
@@ -76,7 +77,7 @@ The catalog is every operation of Ubiquiti's official Network and Protect integr
 | `UNIFI_SPEC_DIR` | where fetched specs are cached; default `$XDG_CACHE_HOME/unifi-mcp` or `~/.cache/unifi-mcp` |
 | `UNIFI_SPEC_AUTO_UPDATE` | `0` to never fetch a spec (a closed network, or a spec you supply yourself) |
 | `UNIFI_AUDIT_LOG` | a file to append every applied change to, one JSON object per line (`{"time", "event"}`, secrets redacted, created readable only by you). Changes always go to stderr too |
-| `UNIFI_READ_ONLY` | `1` to refuse every change (`unifi_write`, `unifi_delete`, `unifi_set_port_forward`), whatever the permissions say |
+| `UNIFI_READ_ONLY` | `1` to refuse every change (`unifi_write`, `unifi_delete`, `unifi_set_port_forward`, `unifi_speedtest`), whatever the permissions say |
 
 Get the fingerprint: `openssl s_client -connect 192.168.1.1:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256`
 
@@ -139,7 +140,8 @@ Claude Code decides, per tool, whether a call runs, asks you, or is refused. `.c
     "ask": [
       "mcp__plugin_unifi_unifi__unifi_write",
       "mcp__plugin_unifi_unifi__unifi_delete",
-      "mcp__plugin_unifi_unifi__unifi_set_port_forward"
+      "mcp__plugin_unifi_unifi__unifi_set_port_forward",
+      "mcp__plugin_unifi_unifi__unifi_speedtest"
     ]
   }
 }
