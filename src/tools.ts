@@ -4,6 +4,7 @@ import { registerApiTools } from './api-tools.js';
 import { SPEC_VERSIONS } from './catalog.js';
 import { GUIDE_URI, guide, INSTRUCTIONS } from './guide.js';
 import { registerPrompts } from './prompts.js';
+import { registerSpeedtest, type SpeedtestOptions } from './speedtest.js';
 import { Udm, UdmError } from './udm.js';
 
 export interface ServerOptions {
@@ -12,6 +13,8 @@ export interface ServerOptions {
   readOnly?: boolean;
   // Every applied change is written here (stderr in the real server). Never the key.
   audit?: (line: string) => void;
+  // How the speed test polls and when it gives up; the defaults are right except in tests.
+  speedtest?: Pick<SpeedtestOptions, 'pollMs' | 'timeoutMs'>;
 }
 
 interface Envelope<T> {
@@ -159,6 +162,7 @@ export function createServer(udm: Udm, options: ServerOptions = {}): McpServer {
   });
 
   registerApiTools(server, udm, options);
+  registerSpeedtest(server, udm, { ...options.speedtest, readOnly: options.readOnly, audit: options.audit });
 
   return server;
 }

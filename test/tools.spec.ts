@@ -29,7 +29,7 @@ async function connect(options: ServerOptions = {}, overrides = {}) {
 describe('read tools', () => {
   it('lists exactly the tools', async () => {
     const { client } = await connect();
-    expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(['unifi_call', 'unifi_delete', 'unifi_describe_operation', 'unifi_health', 'unifi_info', 'unifi_list_clients', 'unifi_list_devices', 'unifi_list_port_forwards', 'unifi_search_api', 'unifi_set_port_forward', 'unifi_write']);
+    expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(['unifi_call', 'unifi_delete', 'unifi_describe_operation', 'unifi_health', 'unifi_info', 'unifi_list_clients', 'unifi_list_devices', 'unifi_list_port_forwards', 'unifi_search_api', 'unifi_set_port_forward', 'unifi_speedtest', 'unifi_write']);
   });
   it('returns only the chosen fields', async () => {
     const { call } = await connect();
